@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.astro/
+temp/
+*.tsbuildinfo
+*.log
+test-results/
+.eslintcache
+
+# Local env files — .env.example is the committed template
+.env
+.env.*
+!.env.example
+
+# OS / editor cruft
+.DS_Store
+.idea
+*.code-workspace

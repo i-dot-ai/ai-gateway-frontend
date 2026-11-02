@@ -1,0 +1,60 @@
+# A real LiteLLM proxy (plus the Postgres it needs for keys, teams and spend),
+# so the frontend can be exercised against something that behaves like the
+# gateway. The models are backed by mock_response, so no provider keys are
+# needed — see litellm-config.yaml.
+#
+#   docker compose up -d
+#
+# Then point .env at it and run the app:
+#
+#   LITELLM_URL=http://localhost:4000
+#   LITELLM_MASTER_KEY=sk-local-dev
+#   npm run dev
+#
+# Key generation needs a team aliased "personal" to exist (LiteLLM does not
+# create it from config). Seed it once:
+#
+#   curl -X POST http://localhost:4000/team/new \
+#     -H "Authorization: Bearer sk-local-dev" -H "Content-Type: application/json" \
+#     -d '{"team_alias":"personal"}'
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: litellm
+      POSTGRES_DB: litellm
+    volumes:
+      - litellm-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm-config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      DATABASE_URL: postgresql://litellm:litellm@db:5432/litellm
+      LITELLM_MASTER_KEY: sk-local-dev
+      # Dummy by default; export the real ones to call the providers.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-sk-noop}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-noop}
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/readiness')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  litellm-db:

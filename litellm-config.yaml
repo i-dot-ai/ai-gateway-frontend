@@ -1,0 +1,102 @@
+# LiteLLM proxy config for local development. Mounted by compose.yaml.
+#
+# Every model uses `mock_response`, so chat completions return a canned reply and
+# need no real provider credentials. Export a real ANTHROPIC_API_KEY /
+# OPENAI_API_KEY to hit the providers for real instead.
+#
+# The `model_info` fields are the custom ones the frontend reads, mirroring the
+# real gateway's models.
+
+model_list:
+  - model_name: claude-opus-4-6
+    litellm_params:
+      model: anthropic/claude-opus-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+      mock_response: "Mock reply from the local LiteLLM instance."
+    model_info:
+      id: claude-opus-4-6
+      litellm_provider: anthropic
+      mode: chat
+      max_input_tokens: 200000
+      max_output_tokens: 64000
+      input_cost_per_token: 0.000015
+      output_cost_per_token: 0.000075
+      supports_vision: true
+      supports_function_calling: true
+      supports_reasoning: true
+      lab: Anthropic
+      country_of_origin: US
+      open_weight: false
+      impact_model: anthropic/claude-opus-4-6
+      description: Most capable Claude model, for hard reasoning and agentic work.
+      uri: https://example.com/models/claude-opus-4-6
+      location: EU
+
+  - model_name: claude-sonnet-4-6
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+      mock_response: "Mock reply from the local LiteLLM instance."
+    model_info:
+      id: claude-sonnet-4-6
+      litellm_provider: anthropic
+      mode: chat
+      max_input_tokens: 200000
+      max_output_tokens: 64000
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
+      supports_vision: true
+      supports_function_calling: true
+      supports_reasoning: true
+      lab: Anthropic
+      country_of_origin: US
+      open_weight: false
+      impact_model: anthropic/claude-sonnet-4-6
+      description: Balanced Claude model for everyday tasks.
+      uri: https://example.com/models/claude-sonnet-4-6
+      location: UK
+
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+      mock_response: "Mock reply from the local LiteLLM instance."
+    model_info:
+      id: gpt-4o
+      litellm_provider: openai
+      mode: chat
+      max_input_tokens: 128000
+      max_output_tokens: 16000
+      input_cost_per_token: 0.0000025
+      output_cost_per_token: 0.00001
+      supports_vision: true
+      supports_function_calling: true
+      supports_reasoning: false
+      lab: OpenAI
+      country_of_origin: US
+      open_weight: false
+      impact_model: openai/gpt-4o
+      description: General-purpose multimodal model.
+      uri: https://example.com/models/gpt-4o
+      location: US
+
+  - model_name: titan-embed-text
+    litellm_params:
+      model: openai/text-embedding-3-small
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      id: titan-embed-text
+      litellm_provider: openai
+      mode: embedding
+      input_cost_per_token: 0.0000001
+      lab: Amazon
+      country_of_origin: US
+      open_weight: false
+      description: Text embeddings.
+
+general_settings:
+  # Master key and DB URL come from the environment (LITELLM_MASTER_KEY,
+  # DATABASE_URL) set in compose.yaml; LiteLLM reads both automatically.
+
+litellm_settings:
+  drop_params: true

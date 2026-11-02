@@ -1,0 +1,57 @@
+{
+  "name": "ai-gateway-frontend",
+  "type": "module",
+  "version": "0.0.1",
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "lint": "astro check",
+    "format": "prettier --write \"src/**/*.astro\"",
+    "format:check": "prettier --check \"src/**/*.astro\"",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@astrojs/node": "^11.1.9",
+    "@ecologits/ecologits.js": "3.0.0",
+    "@fontsource/inter": "^5.3.0",
+    "@i-dot-ai-npm/component-library-astro": "^0.0.11",
+    "@i-dot-ai-npm/component-library-frontend": "^0.0.15",
+    "@i-dot-ai-npm/utilities-auth": "^1.0.1",
+    "@i-dot-ai-npm/utilities-observability": "^1.0.1",
+    "astro": "^7.4.2",
+    "chart.js": "^4.6.1",
+    "dotenv": "^18.0.9",
+    "govuk-frontend": "^6.6.0",
+    "hyparquet": "^1.31.2",
+    "posthog-node": "^5.57.2",
+    "zod": "4.6.7"
+  },
+  "overrides": {
+    "pino@>=7.2.0 <=10.1.0": "10.1.1",
+    "protobufjs@>=0.0.0 <=8.7.2": "8.8.0",
+    "yargs@>=0.0.1 <=18.0.0": "18.1.0",
+    "zod@>=0.0.1 <=4.6.5": "4.6.6",
+    "vitest": {
+      "es-module-lexer": "^3.0.3"
+    }
+  },
+  "allowScripts": {
+    "esbuild": true
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "@types/node": "^26.6.5",
+    "prettier": "^3.9.10",
+    "prettier-plugin-astro": "^1.1.2",
+    "sass-embedded": "^1.106.1",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5",
+    "yaml": "^2.9.1"
+  }
+}
