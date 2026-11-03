@@ -1,0 +1,109 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import CopyableCode from "../../components/CopyableCode.astro";
+import { InsetText } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<ToolingLayout
+  title="Set up a global agent"
+  currentPath="/tooling/set-up-global-agent"
+>
+  <h1 class="govuk-heading-xl">Set up a global agent</h1>
+
+  <p class="govuk-body">
+    Before you start, make sure you have{" "}
+    <a href="/tooling/opencode" class="govuk-link">
+      set up OpenCode with AI Gateway
+    </a>
+    .
+  </p>
+
+  <p class="govuk-body">
+    Global agents are available in every OpenCode session. It does not matter
+    which folder you start in.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To create a folder for your agent, in Terminal, run:
+      <CopyableCode code="mkdir -p ~/.config/opencode/agents" />
+    </li>
+    <li>
+      To create your agent file, run:
+      <CopyableCode code="code ~/.config/opencode/agents/<agent-name>.md" />
+      where <code class="app-code app-code--variable">
+        &lt;agent-name&gt;
+      </code>{" "}
+      is the name of the agent (use lowercase and hyphens or underscores, not
+      spaces).
+    </li>
+    <li>
+      Copy and paste the template into the file:
+      <CopyableCode
+        code={`---
+description: <DESCRIPTION>
+mode: primary
+model: litellm/bedrock-claude-sonnet-4-5-eu
+permission:
+  edit: deny
+  bash: deny
+  external_directory: deny
+---
+
+<INSTRUCTIONS>`}
+      />
+    </li>
+    <li>
+      Edit the template for your needs:
+      <ul class="govuk-list govuk-list--bullet">
+        <li>
+          replace{" "}
+          <code class="app-code app-code--variable">&lt;DESCRIPTION&gt;</code>{" "}
+          with a short description of what the agent does
+        </li>
+        <li>
+          change <code class="app-code">mode</code> to{" "}
+          <code class="app-code">primary</code> (cycle with tab) or{" "}
+          <code class="app-code">subagent</code> (invoked by other agents or
+          with @mention)
+        </li>
+        <li>
+          change the model if you want it to always use a specific one, or
+          delete the line to use whichever model you have selected
+        </li>
+        <li>
+          change the permissions (<code class="app-code">edit</code>,{" "}
+          <code class="app-code">bash</code>,{" "}
+          <code class="app-code">external_directory</code>) to{" "}
+          <code class="app-code">allow</code>, <code class="app-code">ask</code>
+          , or <code class="app-code">deny</code>
+        </li>
+        <li>
+          replace{" "}
+          <code class="app-code app-code--variable">&lt;INSTRUCTIONS&gt;</code>{" "}
+          with your prompt instructions
+        </li>
+      </ul>
+    </li>
+    <li>Save the file.</li>
+    <li>
+      Check it works:
+      <ul class="govuk-list govuk-list--bullet">
+        <li>open Terminal</li>
+        <li>
+          run <code class="app-code">opencode</code> to start OpenCode
+        </li>
+        <li>
+          press <code class="app-code">tab</code> to see available agents - your
+          new agent should appear
+        </li>
+      </ul>
+    </li>
+  </ol>
+
+  <InsetText>
+    To reference files in your instructions, use the full file path. For
+    example:{" "}
+    <code class="app-code">~/Documents/Reference-files/style-guide.md</code>
+  </InsetText>
+</ToolingLayout>

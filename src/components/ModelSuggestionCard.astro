@@ -1,0 +1,153 @@
+---
+// One AI model suggestion as a summary card. The reason is the only AI-written
+// text; every row below it comes from our config or Arena data and is always
+// shown in the same order and format. The data attributes let the page's
+// script and the eval read the picks back without parsing the card.
+import {
+  Link,
+  List,
+  ListItem,
+  SummaryCard,
+  SummaryCardAction,
+  SummaryCardActions,
+  SummaryCardContent,
+  SummaryCardTitleWrapper,
+  SummaryList,
+  SummaryListKey,
+  SummaryListRow,
+  SummaryListValue,
+  Tag,
+} from "@i-dot-ai-npm/component-library-astro";
+import { ARENA_LEADERBOARD_URL } from "../lib/arena";
+import type { ModelSuggestion } from "../lib/modelSearch";
+import {
+  formatCost,
+  formatDate,
+  formatHost,
+  formatMaker,
+  formatTokenLimit,
+  formatYesNo,
+  hostingTagColour,
+  NOT_LISTED,
+} from "../lib/format";
+
+export interface Props {
+  suggestion: ModelSuggestion;
+  position: number;
+}
+
+const { suggestion: s, position } = Astro.props;
+const f = s.facts;
+const href = `/models/${encodeURIComponent(s.id)}`;
+---
+
+<SummaryCard
+  class="app-suggestion-card"
+  data-model-name={s.name}
+  data-reason={s.reason}
+  data-evidence={s.arena_evidence.map((e) => e.label).join("|")}
+>
+  <SummaryCardTitleWrapper>
+    {/* The library title is an h2; these cards sit under the panel's h2, so they are h3. */}
+    <h3 class="govuk-summary-card__title app-suggestion-card__title">
+      <span class="app-suggestion-card__position">{position}.</span>
+      {s.name}
+      <Tag colour={hostingTagColour(f.location)}>
+        Hosted in {f.location ?? NOT_LISTED}
+      </Tag>
+    </h3>
+    <SummaryCardActions>
+      <SummaryCardAction>
+        <Link href={href}>
+          View details<span class="govuk-visually-hidden">of {s.name}</span>
+        </Link>
+      </SummaryCardAction>
+    </SummaryCardActions>
+  </SummaryCardTitleWrapper>
+  <SummaryCardContent>
+    <p class="govuk-body app-suggestion-card__reason">{s.reason}</p>
+    <SummaryList class="govuk-!-margin-bottom-0">
+      <SummaryListRow>
+        <SummaryListKey>Made by</SummaryListKey>
+        <SummaryListValue>
+          {formatMaker(f.lab, f.country_of_origin)}
+        </SummaryListValue>
+      </SummaryListRow>
+      <SummaryListRow>
+        <SummaryListKey>Cost</SummaryListKey>
+        <SummaryListValue>
+          {formatCost(f.input_cost_per_token, f.output_cost_per_token)}
+        </SummaryListValue>
+      </SummaryListRow>
+      <SummaryListRow>
+        <SummaryListKey>Context window</SummaryListKey>
+        <SummaryListValue>
+          {formatTokenLimit(f.context_tokens)}
+        </SummaryListValue>
+      </SummaryListRow>
+      <SummaryListRow>
+        <SummaryListKey>Open weight</SummaryListKey>
+        <SummaryListValue>{formatYesNo(f.open_weight)}</SummaryListValue>
+      </SummaryListRow>
+      <SummaryListRow>
+        <SummaryListKey>Arena rankings</SummaryListKey>
+        <SummaryListValue>
+          {s.arena_evidence.length > 0 ? (
+            <List class="govuk-!-margin-bottom-0">
+              {s.arena_evidence.map((e) => (
+                <ListItem>
+                  {e.label}: {e.text}
+                </ListItem>
+              ))}
+            </List>
+          ) : s.arena_ranked ? (
+            "Ranked, but not cited for this question"
+          ) : (
+            "Not ranked on Arena"
+          )}
+        </SummaryListValue>
+      </SummaryListRow>
+      {f.other_regions.length > 0 && (
+        <SummaryListRow>
+          <SummaryListKey>Also hosted in</SummaryListKey>
+          <SummaryListValue>
+            {f.other_regions.map((r, i) => (
+              <Fragment>
+                {i > 0 && ", "}
+                <Link href={`/models/${encodeURIComponent(r.id)}`}>
+                  {r.location ?? r.name}
+                </Link>
+              </Fragment>
+            ))}
+          </SummaryListValue>
+        </SummaryListRow>
+      )}
+      <SummaryListRow>
+        <SummaryListKey>Sources</SummaryListKey>
+        <SummaryListValue>
+          <List class="govuk-!-margin-bottom-0">
+            {s.source_url && (
+              <ListItem>
+                <Link href={s.source_url} rel="noopener noreferrer">
+                  {formatHost(s.source_url)}
+                </Link>
+                {s.source_checked_at &&
+                  `, checked ${formatDate(s.source_checked_at, true)}`}
+              </ListItem>
+            )}
+            {s.arena_ranked && (
+              <ListItem>
+                <Link href={ARENA_LEADERBOARD_URL} rel="noopener noreferrer">
+                  Arena leaderboard
+                </Link>
+              </ListItem>
+            )}
+            <ListItem>Gateway configuration</ListItem>
+          </List>
+        </SummaryListValue>
+      </SummaryListRow>
+    </SummaryList>
+  </SummaryCardContent>
+</SummaryCard>
+
+<!-- Styles live in styles/idotai.scss: this card is fetched as a fragment, so its own <style> would never load on the page. -->

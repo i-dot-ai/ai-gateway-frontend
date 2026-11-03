@@ -1,0 +1,169 @@
+---
+// User-level budget band for the home page. Budget is a single bucket LiteLLM
+// shares across all of a user's keys, accumulating over the period until it
+// resets, so the bar is a genuine "how close am I" over time. Laid out as a
+// short full-width panel: a row of labelled stats (spend, rate limits, renewal)
+// above a full-width meter. Rate limits show even without a budget cap.
+import {
+  formatSpend,
+  formatRequests,
+  formatTokens,
+  trimCompact,
+} from "../lib/usage";
+import type { UserBudget } from "../lib/litellmKeys";
+
+export interface Props {
+  budget: UserBudget;
+}
+
+const { budget } = Astro.props;
+
+const capped = budget.maxBudget !== null && budget.maxBudget > 0;
+const percent = capped
+  ? Math.min(100, Math.round((budget.spend / budget.maxBudget!) * 100))
+  : null;
+const over = capped && budget.spend >= budget.maxBudget!;
+
+function resetLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+const reset = resetLabel(budget.resetAt);
+
+// Per-minute caps, shown together as one stat; round caps read "5k", not "5.0k".
+const rateLimits: string[] = [];
+if (budget.rpmLimit != null)
+  rateLimits.push(
+    `${trimCompact(formatRequests(budget.rpmLimit))} requests/min`,
+  );
+if (budget.tpmLimit != null)
+  rateLimits.push(`${trimCompact(formatTokens(budget.tpmLimit))} tokens/min`);
+---
+
+<div class="app-budget">
+  <div class="app-budget__top">
+    {capped ? (
+      <div>
+        <p class="govuk-caption-m govuk-!-margin-bottom-0">Spent this period</p>
+        <p class="govuk-body govuk-!-margin-bottom-0">
+          {formatSpend(budget.spend)}{" "}
+          <span class="app-budget__muted">
+            of {formatSpend(budget.maxBudget!)}
+          </span>
+        </p>
+      </div>
+    ) : (
+      <p class="govuk-body govuk-!-margin-bottom-0">No budget limit set.</p>
+    )}
+    {(rateLimits.length > 0 || reset) && (
+      <dl class="app-budget__meta">
+        {rateLimits.length > 0 && (
+          <div>
+            <dt class="govuk-caption-m govuk-!-margin-bottom-0">Rate limits</dt>
+            <dd class="govuk-body govuk-!-margin-bottom-0">
+              {rateLimits.join(" · ")}
+            </dd>
+          </div>
+        )}
+        {reset && (
+          <div>
+            <dt class="govuk-caption-m govuk-!-margin-bottom-0">Renews</dt>
+            <dd class="govuk-body govuk-!-margin-bottom-0">{reset}</dd>
+          </div>
+        )}
+      </dl>
+    )}
+  </div>
+  {capped && (
+    <>
+      <span
+        class="app-meter"
+        role="img"
+        aria-label={`${percent}% of budget used`}
+      >
+        <span
+          class:list={["app-meter__fill", { "app-meter__fill--over": over }]}
+          style={`width:${percent}%`}
+        />
+      </span>
+      <p class="govuk-body-s app-budget__muted govuk-!-margin-top-2 govuk-!-margin-bottom-0">
+        {percent}% of your budget used
+      </p>
+    </>
+  )}
+</div>
+
+<style>
+  /* No outer box: the spend figure and its supporting figures sit on open
+  	   whitespace at one consistent body size, with only the meter bar as a
+  	   visual. The figures lay across the top - spend left, metadata right. */
+  .app-budget__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 15px 40px;
+    margin-bottom: 15px;
+  }
+
+  .app-budget__muted {
+    color: var(--govuk-secondary-text-colour);
+  }
+
+  /* Supporting figures right-align so they read as secondary to the spend, and
+  	   stay intact beside it (flex-shrink: 0) rather than squeezing onto extra
+  	   lines as the viewport narrows. */
+  .app-budget__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 40px;
+    margin: 0;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* Drop the browser's default definition-list indent so each value sits flush
+  	   with its label (visible once left-aligned on narrow screens). */
+  .app-budget__meta dd {
+    margin-left: 0;
+  }
+
+  /* Below the desktop breakpoint the spend-left / figures-right line no longer
+  	   fits, so stack the figures under the spend and left-align them. One jump:
+  	   single line straight to stacked, with no in-between state where the figures
+  	   squeeze onto extra lines while still beside the spend. */
+  @media (max-width: 48.0525em) {
+    .app-budget__top {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 15px;
+    }
+
+    .app-budget__meta {
+      text-align: left;
+    }
+  }
+
+  /* A borderless meter - GOV.UK Frontend has no progress bar, so this is the
+  	   one bespoke element: a blue fill over a light track, red once overspent. */
+  .app-meter {
+    display: block;
+    height: 20px;
+    background-color: var(--govuk-surface-background-colour);
+  }
+
+  .app-meter__fill {
+    display: block;
+    height: 100%;
+    background-color: #1d70b8;
+  }
+
+  .app-meter__fill--over {
+    background-color: var(--govuk-error-colour);
+  }
+</style>

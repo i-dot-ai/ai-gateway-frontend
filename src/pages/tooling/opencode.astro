@@ -1,0 +1,298 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import CopyableCode from "../../components/CopyableCode.astro";
+import { InsetText, WarningText } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<ToolingLayout title="Set up OpenCode" currentPath="/tooling/opencode">
+  <h1 class="govuk-heading-xl">Set up OpenCode</h1>
+
+  <p class="govuk-body">
+    OpenCode can run directly in your terminal, as a desktop app, or as an
+    extension in VS Code. If you connect it to the AI Gateway it will give you
+    access to any{" "}
+    <a class="govuk-link" href="/models">
+      available AI model
+    </a>{" "}
+    (for example, Claude or Gemini).
+  </p>
+
+  <WarningText>
+    If you are using OpenCode version 1, you must update to version 2. Run{" "}
+    <code class="app-code">opencode --version</code> and, if it's 1.x, follow
+    these{" "}
+    <a class="govuk-link" href="/tooling/opencode-update">
+      instructions to update to version 2.x
+    </a>
+    {"."}
+  </WarningText>
+
+  <figure class="govuk-!-margin-bottom-6">
+    <img
+      src="/assets/images/gateway-diagram-opencode.svg"
+      alt="Diagram showing OpenCode running in the command line or in a desktop environment (as an app or VS Code extension). All connect to the AI Gateway, which provides access to Claude, Gemini, GPT and other AI models."
+      class="govuk-!-width-full"
+    />
+  </figure>
+
+  <p class="govuk-body">
+    Before you start, make sure you have{" "}
+    <a class="govuk-link" href="/tooling/get-your-key">
+      your AI Gateway key
+    </a>
+    . Then, to set up OpenCode, you need to:
+  </p>
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      <a class="govuk-link" href="#use-admin-permissions">
+        Use admin permissions
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#install-homebrew">
+        Install Homebrew
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#install-vs-code">
+        Install VS Code
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#install-opencode">
+        Install OpenCode and add your AI Gateway key
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#use-the-desktop-app">
+        (If needed) Use the desktop app
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#connect-to-vs-code">
+        Connect OpenCode to VS Code
+      </a>
+    </li>
+  </ol>
+
+  <InsetText>
+    These steps work for most setups. If you run into issues you can't resolve,
+    contact us in the #ai-model-gateway-team channel on i.AI Slack.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="use-admin-permissions">
+    Use admin permissions
+  </h2>
+
+  <p class="govuk-body">
+    You need (temporary) admin permissions to install software on your Mac.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Select the padlock icon (<strong>Local Admin Management</strong>) on the
+      top menu bar.
+    </li>
+    <li>
+      Choose <strong>Install an app</strong>.
+    </li>
+    <li>
+      Select <strong>Start session</strong>, and enter your laptop password.
+    </li>
+    <li>
+      Select <strong>OK</strong>.
+    </li>
+  </ol>
+
+  <InsetText>
+    These permissions last for 10 minutes. Select the padlock to request more
+    time.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="install-homebrew">
+    Install Homebrew
+  </h2>
+
+  <p class="govuk-body">
+    Homebrew lets you quickly install software using the Terminal.
+  </p>
+
+  <p class="govuk-body">
+    To check if you have Homebrew installed, in Terminal, run:
+  </p>
+  <CopyableCode code="brew" />
+
+  <p class="govuk-body">
+    If the command is not found, you need to install Homebrew.
+  </p>
+
+  <p class="govuk-body">To install Homebrew, in Terminal, run:</p>
+  <CopyableCode
+    code={`/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`}
+  />
+
+  <p class="govuk-body">
+    If you get an error message (such as{" "}
+    <code class="app-code">403 Forbidden</code> or{" "}
+    <code class="app-code">404 Not Found</code>):
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      <a
+        class="govuk-link"
+        href="https://github.com/Homebrew/brew/releases/tag/6.0.6"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Download the Homebrew package
+      </a>{" "}
+      (in the <strong>Assets</strong> section, select{" "}
+      <strong>Homebrew.pkg</strong>).
+    </li>
+    <li>
+      To install Homebrew, in Terminal, run:
+      <CopyableCode code="sudo installer -pkg ~/Downloads/Homebrew.pkg -target /" />
+    </li>
+  </ol>
+
+  <h2 class="govuk-heading-l" id="install-vs-code">
+    Install VS Code
+  </h2>
+
+  <p class="govuk-body">
+    VS Code is an integrated development environment which lets you connect to
+    OpenCode from your code interface.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To check if you have VS Code installed, in Terminal, run:
+      <CopyableCode code="code" />
+    </li>
+  </ol>
+
+  <p class="govuk-body">
+    If the command is not found, you need to install VS Code.
+  </p>
+
+  <ol class="govuk-list govuk-list--number" start="2">
+    <li>
+      To install VS Code, in Terminal, run:
+      <CopyableCode code="brew install --cask visual-studio-code" />
+    </li>
+  </ol>
+
+  <h2 class="govuk-heading-l" id="install-opencode">
+    Install OpenCode and add your AI Gateway key
+  </h2>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To install OpenCode, in Terminal, run:
+      <CopyableCode code="brew install opencode" />
+    </li>
+    <li>
+      To create the OpenCode configuration folder, run:
+      <CopyableCode code="mkdir -p ~/.config/opencode" />
+    </li>
+    <li>
+      <a class="govuk-link" href="/opencode.json" download>
+        Download the configuration file
+      </a>{" "}
+      for OpenCode version 2.x. To check your version, in Terminal, run:
+      <CopyableCode code="opencode --version" />
+    </li>
+    <li>
+      If you are using OpenCode version 1.x, follow these{" "}
+      <a class="govuk-link" href="/tooling/opencode-update">
+        instructions to update to version 2.x
+      </a>
+      {"."}
+    </li>
+    <li>
+      Move the downloaded configuration file into your OpenCode configuration
+      folder:
+      <CopyableCode code="mv ~/Downloads/opencode.json ~/.config/opencode/opencode.json" />
+    </li>
+  </ol>
+
+  <WarningText>
+    You need to download the config file regularly, as we update it with the
+    latest models.
+  </WarningText>
+
+  <h3 class="govuk-heading-m" id="opencode-add-your-key">
+    Add or renew your AI Gateway key
+  </h3>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Copy your AI Gateway key (
+      <a class="govuk-link" href="/tooling/get-your-key">
+        how to get your key
+      </a>
+      ).
+    </li>
+    <li>
+      To start OpenCode, open a new Terminal instance and run:
+      <CopyableCode code="opencode" />
+    </li>
+    <li>
+      To connect your key, run:
+      <CopyableCode code="/connect" />
+    </li>
+    <li>
+      Search for and select <strong>i.AI Gateway</strong>.
+    </li>
+    <li>
+      Paste your AI Gateway key and select <strong>enter</strong>.
+    </li>
+  </ol>
+
+  <h2 class="govuk-heading-l" id="use-the-desktop-app">
+    Use the desktop app
+  </h2>
+
+  <p class="govuk-body">
+    If you use the OpenCode desktop app, make sure you have installed{" "}
+    <strong>v2</strong> of the app. Older v1 versions do not understand the
+    configuration format above, so your AI Gateway models will not appear.
+  </p>
+
+  <p class="govuk-body">
+    The desktop app, terminal and VS Code extension all connect to the same
+    OpenCode service and share credentials. So you do not add your key in the
+    desktop app — instead, connect your key once through the OpenCode CLI (using{" "}
+    <code class="app-code">/connect</code>, as described above), and the desktop
+    app will pick it up automatically.
+  </p>
+
+  <h2 class="govuk-heading-l" id="connect-to-vs-code">
+    Connect OpenCode to VS Code
+  </h2>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Open the <strong>Visual Studio Code</strong> application.
+    </li>
+    <li>
+      Select the <strong>Extensions</strong> (boxes) button in the sidebar.
+    </li>
+    <li>
+      Search:
+      <CopyableCode code="opencode" />
+    </li>
+    <li>
+      Select <strong>OpenCode for VS Code SST</strong>.
+    </li>
+    <li>
+      Select <strong>Install</strong>.
+    </li>
+  </ol>
+
+  <p class="govuk-body">
+    Once the OpenCode extension is installed, the OpenCode icon (a white box)
+    appears at the top of the window.
+  </p>
+</ToolingLayout>

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 380" role="img" aria-labelledby="title-opencode desc-opencode">
+  <title id="title-opencode">How OpenCode connects to the AI Gateway</title>
+  <desc id="desc-opencode">Diagram showing OpenCode running in the command line or in a desktop environment (as an app or VS Code extension). All connect to the AI Gateway, which provides access to Claude, Gemini, GPT and other AI models.</desc>
+  
+  <!-- Command line label - now bold -->
+  <text x="110" y="35" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Command line</text>
+  
+  <!-- OpenCode terminal -->
+  <rect x="20" y="60" width="180" height="50" rx="4" fill="#1d70b8" stroke="#003078" stroke-width="2"/>
+  <text x="110" y="92" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">OpenCode</text>
+  
+  <!-- Desktop environment container -->
+  <rect x="20" y="135" width="180" height="210" rx="4" fill="#f3f2f1" stroke="#b1b4b6" stroke-width="2"/>
+  <text x="110" y="160" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Desktop</text>
+  <text x="110" y="177" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14" font-weight="bold">environment</text>
+  
+  <!-- Opencode App inside desktop container -->
+  <rect x="35" y="195" width="150" height="50" rx="2" fill="#1d70b8" stroke="#003078" stroke-width="1"/>
+  <text x="110" y="227" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Opencode App</text>
+  
+  <!-- VS Code inside desktop container -->
+  <rect x="35" y="260" width="150" height="70" rx="2" fill="#1d70b8" stroke="#003078" stroke-width="1"/>
+  <text x="110" y="285" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">VS Code</text>
+  <text x="110" y="302" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14">(using OpenCode</text>
+  <text x="110" y="319" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14">extension)</text>
+  
+  <!-- Arrows to gateway - lines connect to centre back of arrowhead at y=163 -->
+  <!-- Command line center at y=85, Desktop env center at y=240, midpoint = 162.5 -->
+  <line x1="200" y1="85" x2="290" y2="163" stroke="#0b0c0c" stroke-width="2"/>
+  <line x1="200" y1="240" x2="290" y2="163" stroke="#0b0c0c" stroke-width="2"/>
+  <polygon points="290,158 305,163 290,168" fill="#0b0c0c"/>
+  
+  <!-- Gateway - centered at y=163 -->
+  <rect x="305" y="113" width="180" height="100" rx="4" fill="#00703c" stroke="#004e2a" stroke-width="2"/>
+  <text x="395" y="160" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">AI Gateway</text>
+  <text x="395" y="177" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14">(using your key)</text>
+  
+  <!-- Arrow to models -->
+  <line x1="485" y1="163" x2="515" y2="163" stroke="#0b0c0c" stroke-width="2"/>
+  <polygon points="515,158 530,163 515,168" fill="#0b0c0c"/>
+  
+  <!-- Models container -->
+  <rect x="530" y="35" width="150" height="310" rx="4" fill="#f3f2f1" stroke="#b1b4b6" stroke-width="2"/>
+  <text x="605" y="60" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Models</text>
+  
+  <!-- Model boxes -->
+  <rect x="545" y="80" width="120" height="50" rx="2" fill="#fff7e6" stroke="#ffdd00" stroke-width="1"/>
+  <text x="605" y="112" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14">Claude</text>
+  
+  <rect x="545" y="145" width="120" height="50" rx="2" fill="#fff7e6" stroke="#ffdd00" stroke-width="1"/>
+  <text x="605" y="177" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14">Gemini</text>
+  
+  <rect x="545" y="210" width="120" height="50" rx="2" fill="#fff7e6" stroke="#ffdd00" stroke-width="1"/>
+  <text x="605" y="242" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14">GPT</text>
+  
+  <rect x="545" y="275" width="120" height="50" rx="2" fill="#fff7e6" stroke="#ffdd00" stroke-width="1"/>
+  <text x="605" y="307" text-anchor="middle" fill="#505a5f" font-family="Arial, sans-serif" font-size="14">...</text>
+</svg>

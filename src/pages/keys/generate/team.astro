@@ -1,0 +1,141 @@
+---
+import GovukLayout from "../../../layouts/GovukLayout.astro";
+import {
+  BackLink,
+  InsetText,
+  FormGroup,
+  Label,
+  Hint,
+  ErrorMessage,
+  Input,
+  Select,
+  SelectOption,
+  Button,
+} from "@i-dot-ai-npm/component-library-astro";
+import { KEY_ALIAS_PATTERN, listTeams } from "../../../lib/litellmKeys";
+
+async function readAndClearFlash(key: string): Promise<string | undefined> {
+  const value = await Astro.session?.get(key);
+  if (value) {
+    Astro.session?.delete(key);
+  }
+  return value || undefined;
+}
+
+if (Astro.request.method === "POST") {
+  const email = await Astro.session?.get("user-email");
+  if (!email) {
+    return Astro.redirect("/", 303);
+  }
+
+  const formData = await Astro.request.formData();
+  const keyName = String(formData.get("keyName") ?? "").trim();
+  const [teamId, teamName] = String(formData.get("team") ?? "").split("|");
+
+  if (!KEY_ALIAS_PATTERN.test(keyName)) {
+    Astro.session?.set(
+      "flash-key-name-error",
+      "Key name must start with a letter. Any numbers or extra words need a hyphen or underscore before them, for example batch-eval or test-1.",
+    );
+    return Astro.redirect("/keys/generate/team", 303);
+  }
+
+  Astro.session?.set("pending-key-name", keyName);
+  Astro.session?.set("pending-key-team-id", teamId || "");
+  Astro.session?.set("pending-key-team-name", teamName || "");
+
+  return Astro.redirect("/keys/generate/confirm", 303);
+}
+
+const keyNameError = await readAndClearFlash("flash-key-name-error");
+const teamsError = await readAndClearFlash("flash-error");
+const { teams, error: teamsFetchError } = await listTeams();
+---
+
+<GovukLayout title="Create a team key">
+  <BackLink href="/">Back</BackLink>
+
+  <h1 class="govuk-heading-xl">Create a team key</h1>
+
+  <p class="govuk-body">
+    A team Gateway key is for work-related tasks, for example:
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>team work (for example, work for Consult)</li>
+    <li>profession work (for example, work for your profession's community)</li>
+    <li>function work (for example, exploration or evaluation work)</li>
+  </ul>
+
+  <p class="govuk-body">
+    <a href="/keys/generate/personal" class="govuk-link">
+      Find how to get a key for personal use
+    </a>
+  </p>
+
+  <p class="govuk-body">
+    If you make a different key for each team or piece of work, you can revoke
+    one without affecting the others.
+  </p>
+
+  <InsetText>
+    You can have as many keys as you need. If you use the same name as an
+    existing key, the new key will replace it.
+  </InsetText>
+
+  <p class="govuk-body">Your key name must:</p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>start with a letter</li>
+    <li>only use letters, numbers, hyphens and underscores</li>
+    <li>be 50 characters or fewer</li>
+  </ul>
+
+  {teamsFetchError || teamsError ? (
+    <ErrorMessage class="govuk-body" visuallyHiddenText="">
+      {teamsFetchError || teamsError}
+    </ErrorMessage>
+  ) : (
+    <>
+      <form method="post">
+        <FormGroup class:list={[{ "govuk-form-group--error": keyNameError }]}>
+          <Label size="small" for="key-name">
+            Key name
+          </Label>
+          <Hint id="key-name-hint">
+            Use a name that tells you what the key is for (for example, evals or
+            team-work)
+          </Hint>
+          {keyNameError && (
+            <ErrorMessage id="key-name-error">{keyNameError}</ErrorMessage>
+          )}
+          <Input
+            error={!!keyNameError}
+            id="key-name"
+            name="keyName"
+            type="text"
+            pattern="^[a-zA-Z]+(?:[-_]+[a-zA-Z0-9]+)*$"
+            aria-describedby={
+              keyNameError ? "key-name-hint key-name-error" : "key-name-hint"
+            }
+            required
+          />
+        </FormGroup>
+        <FormGroup>
+          <Label size="small" for="team">
+            Team
+          </Label>
+          <Hint id="team-hint">Choose the team this work is for.</Hint>
+          <Select id="team" name="team" aria-describedby="team-hint">
+            {teams.map((t) => (
+              <SelectOption value={`${t.id}|${t.name}`}>{t.name}</SelectOption>
+            ))}
+          </Select>
+        </FormGroup>
+        <Button class="govuk-!-margin-top-4" type="submit">
+          Continue
+        </Button>
+      </form>
+    </>
+  )}
+</GovukLayout>

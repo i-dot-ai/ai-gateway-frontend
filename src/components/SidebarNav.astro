@@ -1,0 +1,142 @@
+---
+/**
+ * Sidebar navigation for the tooling user guide.
+ *
+ * Renders the i.AI kit ContentsPanel (styled list, section headings and a
+ * current-page indicator) with an optional live search box that filters the
+ * links client-side. The search box is bespoke - the kit ContentsPanel provides
+ * none. Sticky positioning is applied by the parent layout column, not here.
+ *
+ * Usage:
+ * <SidebarNav
+ *   sections={[
+ *     {
+ *       title: "Getting started",
+ *       items: [
+ *         { href: "/docs/install", text: "Installation" },
+ *         { href: "/docs/setup", text: "Setup", current: true },
+ *       ]
+ *     },
+ *   ]}
+ *   ariaLabel="Documentation navigation"
+ * />
+ *
+ * For a flat list (no section headings):
+ * <SidebarNav items={[{ href: "/page-1", text: "Page 1" }]} />
+ */
+import {
+  ContentsPanel,
+  ContentsPanelListHeading,
+  ContentsPanelList,
+  ContentsPanelItem,
+} from "@i-dot-ai-npm/component-library-astro";
+import Input from "./Input.astro";
+
+export interface NavItem {
+  href: string;
+  text: string;
+  current?: boolean;
+}
+
+export interface NavSection {
+  title: string;
+  items: NavItem[];
+  expanded?: boolean;
+}
+
+export interface Props {
+  sections?: NavSection[];
+  items?: NavItem[];
+  ariaLabel?: string;
+  showSearch?: boolean;
+}
+
+const {
+  sections,
+  items,
+  ariaLabel = "Page contents",
+  showSearch = false,
+} = Astro.props;
+---
+
+<div class="app-sidebar">
+  {showSearch && (
+    <div class="govuk-!-margin-bottom-4">
+      <label for="sidebar-search" class="govuk-visually-hidden">
+        Search
+      </label>
+      <Input
+        subtle
+        type="search"
+        id="sidebar-search"
+        placeholder="Search"
+        autocomplete="off"
+      />
+    </div>
+  )}
+
+  <ContentsPanel heading={ariaLabel}>
+    {sections?.map((section) => (
+      <div class="app-sidebar__section">
+        <ContentsPanelListHeading>{section.title}</ContentsPanelListHeading>
+        <ContentsPanelList>
+          {section.items.map((item) => (
+            <ContentsPanelItem href={item.href} current={item.current}>
+              {item.text}
+            </ContentsPanelItem>
+          ))}
+        </ContentsPanelList>
+      </div>
+    ))}
+
+    {items && !sections && (
+      <ContentsPanelList>
+        {items.map((item) => (
+          <ContentsPanelItem href={item.href} current={item.current}>
+            {item.text}
+          </ContentsPanelItem>
+        ))}
+      </ContentsPanelList>
+    )}
+  </ContentsPanel>
+</div>
+
+<script>
+  // Live search: filter the sidebar links as the user types. Sections (a
+  // heading + its list, grouped in .app-sidebar__section) are hidden when none
+  // of their items match; flat items are filtered individually.
+  const searchInput = document.getElementById(
+    "sidebar-search",
+  ) as HTMLInputElement | null;
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      const query = searchInput.value.toLowerCase().trim();
+      const matches = (el: Element | null) =>
+        query === "" ||
+        (el?.textContent?.toLowerCase().includes(query) ?? false);
+
+      // Grouped sections: show the section only if it has a visible item.
+      document.querySelectorAll(".app-sidebar__section").forEach((section) => {
+        let hasVisibleItem = false;
+        section
+          .querySelectorAll(".contents-panel__list-item")
+          .forEach((item) => {
+            const show = matches(item.querySelector(".contents-panel__link"));
+            (item as HTMLElement).style.display = show ? "" : "none";
+            if (show) hasVisibleItem = true;
+          });
+        (section as HTMLElement).style.display = hasVisibleItem ? "" : "none";
+      });
+
+      // Flat list items (no section wrapper).
+      document
+        .querySelectorAll(
+          ".app-sidebar > .contents-panel > .contents-panel__list > .contents-panel__list-item",
+        )
+        .forEach((item) => {
+          const show = matches(item.querySelector(".contents-panel__link"));
+          (item as HTMLElement).style.display = show ? "" : "none";
+        });
+    });
+  }
+</script>

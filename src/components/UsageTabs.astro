@@ -1,0 +1,447 @@
+---
+/**
+ * The usage tabs - Spend, Tokens, Requests, Providers and Caching - over
+ * already-fetched cost rows. Shared by the home page (the user's own keys,
+ * broken down by model, worded "You spent...") and a model's page (everyone's
+ * usage of that model, broken down by team, worded neutrally).
+ */
+import UsageChart from "./UsageChart.astro";
+import BreakdownTable from "./BreakdownTable.astro";
+import type { LitellmCost, LitellmProviderCost } from "../lib/litellm";
+import { keyName } from "../lib/litellmKeys";
+import { getDateRange, timeframeLabel, type Timeframe } from "../lib/costs";
+import {
+  bucketDailyUsage,
+  bucketValues,
+  CHART_PALETTE,
+  formatDay,
+  formatFailureRate,
+  formatRequests,
+  formatShare,
+  formatSpan,
+  formatSpend,
+  formatTokens,
+  granularityFor,
+  listDates,
+  providerLabel,
+  summariseDailyUsage,
+  summariseKeyRequests,
+  summariseKeysUsage,
+  summariseModelSeries,
+  summariseModelUsage,
+  summariseProviderUsage,
+  type ModelSeries,
+} from "../lib/usage";
+
+export interface Props {
+  /** Cost rows, pre-filtered by the caller (e.g. to one user's keys, or one model). */
+  costs: ReadonlyArray<LitellmCost>;
+  /** Omit to hide the Providers tab (provider rows can't be narrowed to one model). */
+  providerCosts?: ReadonlyArray<LitellmProviderCost>;
+  timeframe: Timeframe;
+  /** What the stacked charts and "Top" tables split by. "model" is the user's own view; "team" the gateway-wide one. */
+  breakdown: "model" | "team";
+}
+
+const { costs, providerCosts, timeframe, breakdown } = Astro.props;
+const timeframeCaption = ` in the ${timeframeLabel(timeframe).toLowerCase()}`;
+
+const { startDate, endDate } = getDateRange(timeframe);
+const days = listDates(startDate, endDate);
+const granularity = granularityFor(days.length);
+const usage = summariseKeysUsage(costs);
+const plotSeries = bucketDailyUsage(
+  summariseDailyUsage(costs, days),
+  granularity,
+);
+const keyUsage = summariseKeyRequests(costs);
+const personal = breakdown === "model";
+
+// Shared x-axis for every usage plot: a short label per bucket and the full span
+// for its tooltip title. The GDS categorical palette colours the stacked
+// segments (busiest first, "Other" taking whichever colour it lands on).
+const chartLabels = plotSeries.map((d) => formatDay(d.date));
+const chartTitles = plotSeries.map((d) => formatSpan(d, formatDay));
+const groupOf = personal
+  ? (c: LitellmCost) => c.model_name
+  : (c: LitellmCost) => c.team_name || "Personal keys";
+const datasets = (series: ModelSeries[]) =>
+  series.map((s) => ({
+    label: s.model,
+    data: bucketValues(s.daily, granularity),
+  }));
+const spendSeries = summariseModelSeries(costs, days, (c) => c.spend, groupOf);
+const tokenSeries = summariseModelSeries(
+  costs,
+  days,
+  (c) => c.total_tokens,
+  groupOf,
+);
+
+// The rows each "Top ..." table ranks: models, or teams.
+type Group = {
+  label: string;
+  spend: number;
+  tokens: number;
+  requests: number;
+  failures: number;
+};
+const groups: Group[] = summariseModelUsage(costs, groupOf).map((m) => ({
+  ...m,
+  label: m.model,
+}));
+const groupHeader = personal ? "Model" : "Team";
+const topHeading = personal ? "Top models" : "Top teams";
+
+interface TableSpec {
+  heading: string;
+  /** First entry is the label column header; the rest are numeric columns. */
+  columns: string[];
+  rows: Array<{ label: string; values: string[] }>;
+}
+
+// Top `limit` items by `metric`, busiest first, dropping any with a zero metric.
+function topN<T>(
+  items: ReadonlyArray<T>,
+  metric: (item: T) => number,
+  limit = 5,
+): T[] {
+  return items
+    .filter((item) => metric(item) > 0)
+    .sort((a, b) => metric(b) - metric(a))
+    .slice(0, limit);
+}
+
+function topRows(
+  items: ReadonlyArray<Group>,
+  metric: (m: Group) => number,
+  toValues: (m: Group) => string[],
+) {
+  return topN(items, metric).map((m) => ({
+    label: m.label,
+    values: toValues(m),
+  }));
+}
+
+// The spend and tokens views: a stacked plot plus breakdown tables. Tokens also
+// carries the input/output split (prompt + completion sum to the total).
+const byType: TableSpec = {
+  heading: "By type",
+  columns: ["Type", "Tokens", "Share"],
+  rows:
+    usage.tokens > 0
+      ? [
+          {
+            label: "Input",
+            values: [
+              formatTokens(usage.promptTokens),
+              formatShare(usage.promptTokens, usage.tokens),
+            ],
+          },
+          {
+            label: "Output",
+            values: [
+              formatTokens(usage.completionTokens),
+              formatShare(usage.completionTokens, usage.tokens),
+            ],
+          },
+        ]
+      : [],
+};
+const usageBlocks = [
+  {
+    id: "spend",
+    label: "Spend",
+    headline: personal
+      ? `You spent ${formatSpend(usage.spend)}${timeframeCaption}`
+      : `${formatSpend(usage.spend)} spent${timeframeCaption}`,
+    caption: `Spend per ${granularity} by ${breakdown}`,
+    yLabel: "Spend ($)",
+    valueFormat: "spend" as const,
+    datasets: datasets(spendSeries),
+    tables: [
+      {
+        heading: topHeading,
+        columns: [groupHeader, "Total spend"],
+        rows: topRows(
+          groups,
+          (m) => m.spend,
+          (m) => [formatSpend(m.spend)],
+        ),
+      },
+    ],
+  },
+  {
+    id: "tokens",
+    label: "Tokens",
+    headline: personal
+      ? `You used ${formatTokens(usage.tokens)} tokens${timeframeCaption}`
+      : `${formatTokens(usage.tokens)} tokens used${timeframeCaption}`,
+    caption: `Tokens per ${granularity} by ${breakdown}`,
+    yLabel: "Tokens",
+    valueFormat: "tokens" as const,
+    datasets: datasets(tokenSeries),
+    tables: [
+      byType,
+      {
+        heading: topHeading,
+        columns: [groupHeader, "Tokens"],
+        rows: topRows(
+          groups,
+          (m) => m.tokens,
+          (m) => [formatTokens(m.tokens)],
+        ),
+      },
+    ],
+  },
+];
+
+// The Requests tab is about reliability: request volume with successes and
+// failures stacked (failures in red), plus where failures concentrate.
+// Floored to one decimal so a near-perfect rate never rounds up to "100.0%".
+const succeeded =
+  usage.requests > 0
+    ? Math.floor(((usage.requests - usage.failures) / usage.requests) * 1000) /
+      10
+    : 100;
+const requestView = {
+  headline: personal
+    ? `You made ${formatRequests(usage.requests)} requests${timeframeCaption}`
+    : `${formatRequests(usage.requests)} requests made${timeframeCaption}`,
+  subhead:
+    usage.failures > 0
+      ? `${succeeded.toFixed(1)}% succeeded, ${formatRequests(usage.failures)} failed`
+      : "All succeeded",
+  caption: `Requests per ${granularity}, failures in red`,
+  datasets: [
+    {
+      label: "Succeeded",
+      data: plotSeries.map((d) => d.requests - d.failures),
+    },
+    { label: "Failed", data: plotSeries.map((d) => d.failures) },
+  ],
+  tables: [
+    {
+      heading: `Failures by ${groupHeader.toLowerCase()}`,
+      columns: [groupHeader, "Failed", "Failure rate"],
+      rows: topRows(
+        groups,
+        (m) => m.failures,
+        (m) => [
+          formatRequests(m.failures),
+          formatFailureRate(m.failures, m.requests),
+        ],
+      ),
+    },
+    // Key names are only shown on the user's own view, never other people's.
+    ...(personal
+      ? [
+          {
+            heading: "Failures by key",
+            columns: ["Key", "Failed", "Failure rate"],
+            rows: topN(keyUsage, (k) => k.failures).map((k) => ({
+              label: keyName(k.name),
+              values: [
+                formatRequests(k.failures),
+                formatFailureRate(k.failures, k.requests),
+              ],
+            })),
+          },
+        ]
+      : []),
+  ],
+};
+
+// The provider mix: which backends served the requests, busiest first.
+const providerTable: TableSpec = {
+  heading: "By provider",
+  columns: ["Provider", "Requests", "Spend", "Tokens"],
+  rows: summariseProviderUsage(providerCosts ?? [])
+    .filter((p) => p.requests > 0)
+    .sort((a, b) => b.requests - a.requests)
+    .map((p) => ({
+      label: providerLabel(p.provider),
+      values: [
+        formatRequests(p.requests),
+        formatSpend(p.spend),
+        formatTokens(p.tokens),
+      ],
+    })),
+};
+
+// Prompt caching. Cache reads and writes are subsets of input tokens, so they're
+// framed against input, not the grand total. Gated on promptTokens too: it's the
+// denominator for every share below.
+const hasCaching =
+  usage.promptTokens > 0 &&
+  usage.cacheReadTokens + usage.cacheCreationTokens > 0;
+const cacheReadShare = formatShare(usage.cacheReadTokens, usage.promptTokens);
+const cacheFresh = Math.max(
+  0,
+  usage.promptTokens - usage.cacheReadTokens - usage.cacheCreationTokens,
+);
+const cacheTable: TableSpec = {
+  heading: "Input tokens by source",
+  columns: ["Source", "Tokens", "Share"],
+  rows:
+    usage.promptTokens > 0
+      ? [
+          {
+            label: "From cache",
+            values: [
+              formatTokens(usage.cacheReadTokens),
+              formatShare(usage.cacheReadTokens, usage.promptTokens),
+            ],
+          },
+          {
+            label: "Cache writes",
+            values: [
+              formatTokens(usage.cacheCreationTokens),
+              formatShare(usage.cacheCreationTokens, usage.promptTokens),
+            ],
+          },
+          {
+            label: "Fresh",
+            values: [
+              formatTokens(cacheFresh),
+              formatShare(cacheFresh, usage.promptTokens),
+            ],
+          },
+        ]
+      : [],
+};
+---
+
+<div class="govuk-tabs" data-module="govuk-tabs">
+  <h3 class="govuk-tabs__title">Usage over the selected period</h3>
+  <ul class="govuk-tabs__list">
+    {usageBlocks.map((m, i) => (
+      <li
+        class:list={[
+          "govuk-tabs__list-item",
+          { "govuk-tabs__list-item--selected": i === 0 },
+        ]}
+      >
+        <a class="govuk-tabs__tab" href={`#usage-${m.id}`}>
+          {m.label}
+        </a>
+      </li>
+    ))}
+    <li class="govuk-tabs__list-item">
+      <a class="govuk-tabs__tab" href="#usage-requests">
+        Requests
+      </a>
+    </li>
+    {providerTable.rows.length > 0 && (
+      <li class="govuk-tabs__list-item">
+        <a class="govuk-tabs__tab" href="#usage-providers">
+          Providers
+        </a>
+      </li>
+    )}
+    {hasCaching && (
+      <li class="govuk-tabs__list-item">
+        <a class="govuk-tabs__tab" href="#usage-caching">
+          Caching
+        </a>
+      </li>
+    )}
+  </ul>
+  {usageBlocks.map((m, i) => (
+    <div
+      class:list={[
+        "govuk-tabs__panel",
+        { "govuk-tabs__panel--hidden": i !== 0 },
+      ]}
+      id={`usage-${m.id}`}
+    >
+      <h3 class="govuk-body-l govuk-!-font-weight-regular govuk-!-margin-bottom-3">
+        {m.headline}
+      </h3>
+      <UsageChart
+        id={`chart-${m.id}`}
+        labels={chartLabels}
+        titles={chartTitles}
+        datasets={m.datasets}
+        colors={CHART_PALETTE}
+        yLabel={m.yLabel}
+        valueFormat={m.valueFormat}
+        caption={m.caption}
+      />
+      {m.tables
+        .filter((t) => t.rows.length > 0)
+        .map((t) => (
+          <BreakdownTable
+            heading={t.heading}
+            columns={t.columns}
+            rows={t.rows}
+          />
+        ))}
+    </div>
+  ))}
+
+  <div class="govuk-tabs__panel govuk-tabs__panel--hidden" id="usage-requests">
+    <h3 class="govuk-body-l govuk-!-font-weight-regular govuk-!-margin-bottom-1">
+      {requestView.headline}
+    </h3>
+    <p class="govuk-body-s app-muted govuk-!-margin-bottom-3">
+      {requestView.subhead}
+    </p>
+    <UsageChart
+      id="chart-requests"
+      labels={chartLabels}
+      titles={chartTitles}
+      datasets={requestView.datasets}
+      colors={[CHART_PALETTE[0], "var(--govuk-error-colour)"]}
+      yLabel="Requests"
+      valueFormat="count"
+      caption={requestView.caption}
+    />
+    {requestView.tables
+      .filter((t) => t.rows.length > 0)
+      .map((t) => (
+        <BreakdownTable heading={t.heading} columns={t.columns} rows={t.rows} />
+      ))}
+    {requestView.tables.every((t) => t.rows.length === 0) && (
+      <p class="govuk-body-s app-muted govuk-!-margin-top-3 govuk-!-margin-bottom-0">
+        No failures in this period.
+      </p>
+    )}
+  </div>
+  {providerTable.rows.length > 0 && (
+    <div
+      class="govuk-tabs__panel govuk-tabs__panel--hidden"
+      id="usage-providers"
+    >
+      <h3 class="govuk-body-l govuk-!-font-weight-regular govuk-!-margin-bottom-3">
+        {providerTable.rows.length}{" "}
+        {providerTable.rows.length === 1 ? "provider" : "providers"} served{" "}
+        {personal ? "your " : ""}requests{timeframeCaption}
+      </h3>
+      <BreakdownTable
+        heading={providerTable.heading}
+        columns={providerTable.columns}
+        rows={providerTable.rows}
+      />
+    </div>
+  )}
+  {hasCaching && (
+    <div class="govuk-tabs__panel govuk-tabs__panel--hidden" id="usage-caching">
+      <h3 class="govuk-body-l govuk-!-font-weight-regular govuk-!-margin-bottom-3">
+        {cacheReadShare} of {personal ? "your " : ""}input tokens were served
+        from cache{timeframeCaption}
+      </h3>
+      <BreakdownTable
+        heading={cacheTable.heading}
+        columns={cacheTable.columns}
+        rows={cacheTable.rows}
+      />
+    </div>
+  )}
+</div>
+
+<style>
+  .app-muted {
+    color: var(--govuk-secondary-text-colour);
+  }
+</style>

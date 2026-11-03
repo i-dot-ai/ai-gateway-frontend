@@ -1,0 +1,342 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import { WarningText } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<ToolingLayout
+  title="Policies and processes"
+  currentPath="/tooling/policies-and-processes"
+>
+  <h1 class="govuk-heading-xl">Policies and processes</h1>
+
+  <p class="govuk-body">
+    These policies explain how you should use the Gateway, and how to ask for
+    help:
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      <a class="govuk-link" href="#acceptable-use">
+        acceptable use of the Gateway
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#managing-access-keys">
+        managing access keys
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#budgets">
+        budgets for keys
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#rates-and-limits">
+        rates and limits
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#uptime-and-reliability">
+        uptime and reliability
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#external-users">
+        access for external users
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#getting-access-to-models">
+        getting access to models
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#sharing-data">
+        sharing data with models
+      </a>
+    </li>
+  </ul>
+
+  <h2 class="govuk-heading-m" id="acceptable-use">
+    Acceptable use of the Gateway
+  </h2>
+
+  <p class="govuk-body">
+    You should only access AI models through the gateway (including Bedrock
+    models). Find out more about{" "}
+    <a class="govuk-link" href="#getting-access-to-models">
+      model access and adding models
+    </a>
+    .
+  </p>
+
+  <p class="govuk-body">You may only use the Gateway for:</p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>exploration (investigating AI products and capabilities)</li>
+    <li>
+      product development (prototyping, building, maintaining, and evaluation)
+    </li>
+    <li>
+      personal business use (for example, performance or professional
+      development)
+    </li>
+  </ul>
+
+  <WarningText>
+    Do not use AI outputs as the sole basis for decisions affecting individuals,
+    without human review or rigorous evaluation. You must comply with the{" "}
+    <a
+      class="govuk-link"
+      href="https://www.gov.uk/government/publications/civil-service-code/the-civil-service-code"
+    >
+      Civil Service Code
+    </a>
+    . Breach of this policy will be handled under the DSIT disciplinary process.
+  </WarningText>
+
+  <h2 class="govuk-heading-m" id="managing-access-keys">
+    Managing access keys
+  </h2>
+
+  <p class="govuk-body">
+    There are{" "}
+    <a
+      class="govuk-link"
+      href="https://docs.litellm.ai/docs/proxy/access_control#when-to-use-each-key-type"
+    >
+      3 kinds of key
+    </a>
+    :
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      <strong>User</strong>: for your personal use (for example, performance or
+      development)
+    </li>
+    <li>
+      <strong>Product</strong>: for the product or app to use directly
+    </li>
+    <li>
+      <strong>Team</strong>: for work with teams (such as Consult), professions
+      (for community work) or functions (for evaluation)
+    </li>
+  </ul>
+
+  <h3 class="govuk-heading-s" id="creating-keys">
+    Creating personal AI gateway keys
+  </h3>
+
+  <p class="govuk-body">
+    You can create personal AI gateway keys in 3 ways depending on if the model
+    is available. You can{" "}
+    <a class="govuk-link" href="https://llm-gateway-console.i.ai.gov.uk/models">
+      see available models
+    </a>
+    .
+  </p>
+
+  <p class="govuk-body">If the model is:</p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      available through an approved provider, use the Gateway app to{" "}
+      <a
+        class="govuk-link"
+        href="https://llm-gateway-console.i.ai.gov.uk/keys/generate/personal"
+      >
+        create a personal key
+      </a>{" "}
+      or{" "}
+      <a
+        class="govuk-link"
+        href="https://llm-gateway-console.i.ai.gov.uk/keys/generate/team"
+      >
+        create a team key
+      </a>
+    </li>
+    <li>
+      available with a provider key, contact us in the #ai-model-gateway-team
+      channel on i.AI Slack for a unique provider key
+    </li>
+    <li>
+      not available, raise a PR for a new provider and model explaining why you
+      need to use it - SLT will review and grant a provider key on a
+      case-by-case basis
+    </li>
+  </ul>
+
+  <WarningText>
+    You must only access models using your own keys. You must not share your
+    key.
+  </WarningText>
+
+  <h4 class="govuk-heading-s">Creating temporary keys</h4>
+
+  <p class="govuk-body">
+    If someone outside i.AI needs a key for a short time (like a hackathon for 2
+    days), contact us in the #ai-model-gateway-team channel to request a
+    temporary key.
+  </p>
+
+  <h4 class="govuk-heading-s">Key rotation</h4>
+
+  <p class="govuk-body">
+    Your user and team keys will expire every 2 months, and you will need to
+    update them.
+  </p>
+
+  <p class="govuk-body">
+    This keeps them secure and helps you make sure every key is still needed
+    (for example, processes you don't need any more).
+  </p>
+
+  <h4 class="govuk-heading-s">Support with keys</h4>
+
+  <p class="govuk-body">
+    Contact us in the #ai-model-gateway-team channel, if:
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>your team doesn't exist</li>
+    <li>you need a product key</li>
+  </ul>
+
+  <p class="govuk-body">
+    We will review and meet your request within 3 working days.
+  </p>
+
+  <h2 class="govuk-heading-m" id="budgets">
+    Budgets for keys
+  </h2>
+
+  <p class="govuk-body">
+    Spend controls are applied using role-based access controls for the 3 kinds
+    of key. There are 3 proposed monthly budget limits, a:
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>personal budget for each user</li>
+    <li>team budget for each person in a product team</li>
+    <li>budget for each product</li>
+  </ul>
+
+  <p class="govuk-body">
+    You can see your remaining budget on{" "}
+    <a class="govuk-link" href="https://llm-gateway-console.i.ai.gov.uk/">
+      your summary page in the AI Gateway app
+    </a>
+    .
+  </p>
+
+  <p class="govuk-body">
+    Contact us in the #ai-model-gateway-team channel to request a temporary or
+    permanent increase to your budget. Gateway management will review and
+    approve this within 1 working day.
+  </p>
+
+  <h2 class="govuk-heading-m" id="rates-and-limits">
+    Rates and limits
+  </h2>
+
+  <p class="govuk-body">
+    There are limits on how much of the model's capacity any one user can use.
+    This stops anyone blocking everyone else during busy periods. You can see
+    your limits on{" "}
+    <a class="govuk-link" href="https://llm-gateway-console.i.ai.gov.uk/">
+      your summary page in the AI Gateway app
+    </a>
+    .
+  </p>
+
+  <p class="govuk-body">
+    If you're hitting limits and it's affecting your work, contact us in the
+    #ai-model-gateway-team channel.
+  </p>
+
+  <h2 class="govuk-heading-m" id="uptime-and-reliability">
+    Uptime and reliability
+  </h2>
+
+  <p class="govuk-body">
+    You should report outages as soon as you identify them. Contact us in the
+    #ai-model-gateway-team channel and we will update you when it's resolved.
+  </p>
+
+  <h2 class="govuk-heading-m" id="external-users">
+    Gateway access for external users
+  </h2>
+
+  <p class="govuk-body">
+    All i.AI employees are allowed access to the Gateway.
+  </p>
+
+  <p class="govuk-body">
+    If you are not an i.AI employee, you may be able to get network access (IP
+    allowlisting). Contact us in the #ai-model-gateway-team channel with your
+    static IP range.
+  </p>
+
+  <h2 class="govuk-heading-m" id="getting-access-to-models">
+    Getting access to models
+  </h2>
+
+  <p class="govuk-body">
+    Check{" "}
+    <a class="govuk-link" href="https://llm-gateway-console.i.ai.gov.uk/models">
+      available models
+    </a>{" "}
+    to see which models you can use. All models listed are approved and
+    accessible using the LLM gateway.
+  </p>
+
+  <p class="govuk-body">
+    If the model is not in the list, you can add a model:
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      immediately, if it is from an approved provider (such as Azure, Bedrock
+      and GCP) by raising a pull request
+    </li>
+    <li>
+      with SLT approval, if it is from a new provider (email a member of SLT
+      explaining why you need to use it)
+    </li>
+  </ul>
+
+  <p class="govuk-body">
+    Contact us in the #ai-model-gateway-team channel to discuss getting access
+    to an 'unavailable' model.
+  </p>
+
+  <h2 class="govuk-heading-m" id="sharing-data">
+    Sharing data with models (information security)
+  </h2>
+
+  <p class="govuk-body">If the model is not cleared for:</p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      official-sensitive data, you must not share any information marked as
+      official-sensitive or above
+    </li>
+    <li>
+      personal identifiable information, you must anonymise and remove personal
+      identifiers from data before using it with any model
+    </li>
+  </ul>
+
+  <p class="govuk-body">
+    If you are unsure if data is suitable for use with a model, contact us in
+    the #ai-model-gateway-team channel.
+  </p>
+
+  <WarningText>
+    If you accidentally share inappropriate information with a model you think
+    you shouldn't have (a data breach), email a member of SLT. They will review
+    the breach and support you to fix any issues and may do a post-incident
+    report so that lessons can be learned.
+  </WarningText>
+</ToolingLayout>

@@ -1,0 +1,55 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+---
+
+<ToolingLayout title="User guide" currentPath="/tooling">
+  <h1 class="govuk-heading-xl">User guide</h1>
+
+  <p class="govuk-body">
+    To connect to the AI Gateway you need to{" "}
+    <a class="govuk-link" href="/tooling/get-your-key">
+      get your AI Gateway key
+    </a>
+    . You can connect your key to many existing tools, for example:
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      <a class="govuk-link" href="/tooling/opencode">
+        OpenCode
+      </a>{" "}
+      (a terminal-based coding agent which lets you choose different models)
+    </li>
+    <li>
+      <a class="govuk-link" href="/tooling/claude-code">
+        Claude Code
+      </a>{" "}
+      (a terminal-based coding agent from Anthropic)
+    </li>
+    <li>
+      <a class="govuk-link" href="/tooling/cursor">
+        Cursor
+      </a>{" "}
+      (a code editor built on VS Code)
+    </li>
+    <li>
+      <a class="govuk-link" href="/tooling/pi">
+        Pi
+      </a>{" "}
+      (a terminal-based coding agent you can customise with extensions)
+    </li>
+  </ul>
+
+  <figure class="govuk-!-margin-top-6 govuk-!-margin-bottom-6">
+    <img
+      src="/assets/images/gateway-diagram-generic.svg"
+      alt="Diagram showing your tool connecting to the AI Gateway, which then connects to multiple AI models including Claude, Gemini and others."
+      class="govuk-!-width-full"
+    />
+  </figure>
+
+  <p class="govuk-body">
+    Your AI Gateway key gives you access to multiple models. When you submit a
+    request, your tool sends it through the AI Gateway to your chosen model.
+  </p>
+</ToolingLayout>

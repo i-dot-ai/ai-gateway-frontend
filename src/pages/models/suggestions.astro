@@ -1,0 +1,53 @@
+---
+// HTML fragment of AI suggestion cards for /models?q=..., fetched by that
+// page's script so the cards render server-side with GOV.UK components.
+// GET /models/suggestions?q=...&provider=&location=&vision&reasoning (the /models filters).
+// Also accepts ?usecase=... which maps to a predefined query.
+import ModelSuggestionCard from "../../components/ModelSuggestionCard.astro";
+import { logger } from "../../lib/logging";
+import {
+  askModels,
+  describeFilter,
+  filterFromParams,
+  resolveQuery,
+} from "../../lib/modelSearch";
+import { captureModelSearch } from "../../lib/posthog";
+
+export const partial = true;
+
+const filter = filterFromParams(Astro.url.searchParams);
+const query = resolveQuery(Astro.url.searchParams);
+const result = query
+  ? await askModels(query, filter)
+  : { suggestions: [], error: "Missing q" };
+if (result.error) Astro.response.status = 502;
+
+// Who asked what, and what they were shown: the signal for whether this feature earns its keep.
+const email = (await Astro.session?.get("user-email")) ?? "unknown";
+const suggested = result.suggestions.map((s) => s.name);
+const search = {
+  query,
+  kind: "question" as const,
+  filters: describeFilter(filter),
+  results: suggested.length,
+  suggested,
+  error: result.error,
+};
+logger.info({ email, ...search }, "Model search answered");
+captureModelSearch(email, search);
+---
+
+{result.error ? (
+  <p class="govuk-body">
+    Suggestions are unavailable right now. The full list of models is below.
+  </p>
+) : result.suggestions.length === 0 ? (
+  <p class="govuk-body">
+    No suggestions for this search and these filters. The full list of models is
+    below.
+  </p>
+) : (
+  result.suggestions.map((s, i) => (
+    <ModelSuggestionCard suggestion={s} position={i + 1} />
+  ))
+)}

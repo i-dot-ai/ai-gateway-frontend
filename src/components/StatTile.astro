@@ -1,0 +1,129 @@
+---
+/**
+ * One KPI tile - label, value and a change chip vs the previous period - used
+ * by both the headline grid and the reliability grid on the trends page. The grids differ only in column count (set on their `<dl>`); the tile,
+ * including the change chip and its screen-reader text, lives here so the markup
+ * exists once.
+ */
+export interface Props {
+  label: string;
+  value: string;
+  /** Percentage change vs the previous window, or null when there's no comparable baseline. */
+  delta: number | null;
+  /** Flip the colour so a rise reads red (e.g. failures): the arrow still shows direction. */
+  higherIsWorse?: boolean;
+  /** The window noun for the screen-reader text ("...on the previous 30 days"). */
+  periodNoun: string;
+}
+
+const { label, value, delta, higherIsWorse = false, periodNoun } = Astro.props;
+
+// Turn a delta into a rounded percentage with a direction arrow. A change that
+// rounds to 0% shows neutral (grey, no arrow) rather than a misleading green/red.
+// The arrow shows direction; the colour shows good vs bad. Growth is usually good
+// (up = green), but for failures it's reversed (higherIsWorse), so more failures
+// reads red while the arrow still points up.
+function deltaChip(d: number | null) {
+  if (d === null) return null;
+  const rounded = Math.round(d);
+  if (rounded === 0)
+    return { tone: "flat", arrow: "→", text: "0%", word: "no change" };
+  const rising = rounded > 0;
+  const good = higherIsWorse ? !rising : rising;
+  return {
+    tone: good ? "up" : "down", // --up is green, --down is red
+    arrow: rising ? "▲" : "▼",
+    text: `${Math.abs(rounded)}%`,
+    word: rising ? "up" : "down",
+  };
+}
+
+const chip = deltaChip(delta);
+---
+
+<div class="app-stat">
+  <dt class="app-stat__label">{label}</dt>
+  <dd class="app-stat__value">{value}</dd>
+  <dd
+    class:list={[
+      "app-stat__delta",
+      chip ? `app-stat__delta--${chip.tone}` : "app-stat__delta--none",
+    ]}
+  >
+    {chip ? (
+      <>
+        <span aria-hidden="true">
+          {chip.arrow} {chip.text}
+        </span>
+        <span class="govuk-visually-hidden">
+          {chip.word === "no change"
+            ? "no change"
+            : `${chip.word} ${chip.text}`}{" "}
+          on the previous {periodNoun}
+        </span>
+      </>
+    ) : (
+      <>
+        <span aria-hidden="true">—</span>
+        <span class="govuk-visually-hidden">no comparison available</span>
+      </>
+    )}
+  </dd>
+</div>
+
+<style>
+  /* Every tile is the same centred column - label, value, change - so a number
+  	   always sits in the same place regardless of how long its value is. */
+  .app-stat {
+    background-color: #ffffff;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+  }
+
+  /* Label and value share one size so the pair reads as a single statement;
+  	   weight alone marks the figure. */
+  .app-stat__label,
+  .app-stat__value {
+    font-family: "Inter", Helvetica, Arial, sans-serif;
+    font-size: 1.5rem;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  .app-stat__label {
+    color: var(--govuk-text-colour);
+  }
+
+  .app-stat__value {
+    font-weight: 700;
+    color: var(--govuk-text-colour);
+    overflow-wrap: anywhere;
+  }
+
+  /* The change chip, always on its own line in the same slot. Up is green, down
+  	   red, flat/none grey. The arrow and hidden text back the colour, so it never
+  	   signals by colour alone. */
+  .app-stat__delta {
+    font-family: "Inter", Helvetica, Arial, sans-serif;
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 4px 0 0;
+    white-space: nowrap;
+  }
+
+  .app-stat__delta--up {
+    color: var(--govuk-success-colour);
+  }
+
+  .app-stat__delta--down {
+    color: var(--govuk-error-colour);
+  }
+
+  .app-stat__delta--flat,
+  .app-stat__delta--none {
+    color: var(--govuk-secondary-text-colour);
+  }
+</style>

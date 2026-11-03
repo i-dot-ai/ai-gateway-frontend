@@ -1,0 +1,68 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import { WarningText } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<ToolingLayout
+  title="Get your AI Gateway key"
+  currentPath="/tooling/get-your-key"
+>
+  <h1 class="govuk-heading-xl">Get your AI Gateway key</h1>
+
+  <p class="govuk-body">
+    All tools need an AI Gateway key, which connects to your budget allowance.
+    You can:
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      <a class="govuk-link" href="/keys/generate/personal">
+        create a personal key
+      </a>{" "}
+      for personal use (such as, performance management or personal development)
+    </li>
+    <li>
+      <a class="govuk-link" href="/keys/generate/team">
+        create a team key
+      </a>{" "}
+      for team work (such as, prototyping and evaluation) or community work
+      (such as development to support your profession)
+    </li>
+    <li>
+      contact us in the #ai-model-gateway-team channel on i.AI Slack to create a
+      product key (used by products directly)
+    </li>
+  </ul>
+
+  <WarningText> Do not share your key with anybody else. </WarningText>
+
+  <h2 class="govuk-heading-m">Next steps</h2>
+
+  <p class="govuk-body">
+    Once you have your key, follow the setup instructions to add it to your
+    chosen tool:
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      <a class="govuk-link" href="/tooling/opencode">
+        Set up OpenCode
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="/tooling/claude-code">
+        Set up Claude Code
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="/tooling/cursor">
+        Set up Cursor
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="/tooling/pi">
+        Set up Pi
+      </a>
+    </li>
+  </ul>
+</ToolingLayout>

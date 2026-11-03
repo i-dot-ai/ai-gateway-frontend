@@ -1,0 +1,212 @@
+---
+/**
+ * Page feedback component - "Is this page useful?"
+ *
+ * Behaviour:
+ * - Yes: "Thank you for your feedback. Please answer this quick survey so we understand what meets your needs."
+ * - No: "Thank you for your feedback. Please answer this quick survey to help us improve the AI Gateway site."
+ *
+ * Both Yes and No clicks are tracked in PostHog via the /api/feedback endpoint.
+ * The form links pass the response so we can correlate form submissions with the initial click.
+ */
+---
+
+<div class="app-feedback" id="feedback-component">
+  <div class="app-feedback__content govuk-width-container">
+    <!-- Initial state: Yes/No question -->
+    <div class="app-feedback__prompt" id="feedback-prompt">
+      <span class="app-feedback__text app-feedback__text--bold">
+        Is this page useful?
+      </span>
+      <button class="app-feedback__button" data-response="yes" type="button">
+        Yes
+      </button>
+      <button class="app-feedback__button" data-response="no" type="button">
+        No
+      </button>
+    </div>
+
+    <!-- Yes state: Thank you + survey link -->
+    <div
+      class="app-feedback__response app-feedback__response--hidden"
+      id="feedback-yes"
+    >
+      <p class="app-feedback__text app-feedback__text--bold">
+        Thank you for your feedback.
+      </p>
+      <p class="app-feedback__text">
+        Please{" "}
+        <a
+          class="govuk-link"
+          id="feedback-yes-link"
+          href="/feedback"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          answer this quick survey (opens in a new tab)
+        </a>{" "}
+        so we understand what meets your needs.
+      </p>
+    </div>
+
+    <!-- No state: Thank you + survey link -->
+    <div
+      class="app-feedback__response app-feedback__response--hidden"
+      id="feedback-no"
+    >
+      <p class="app-feedback__text app-feedback__text--bold">
+        Thank you for your feedback.
+      </p>
+      <p class="app-feedback__text">
+        Please{" "}
+        <a
+          class="govuk-link"
+          id="feedback-no-link"
+          href="/feedback"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          answer this quick survey (opens in a new tab)
+        </a>{" "}
+        to help us improve the AI Gateway site.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const component = document.getElementById("feedback-component");
+    if (!component) return;
+
+    const prompt = document.getElementById("feedback-prompt");
+    const yesResponse = document.getElementById("feedback-yes");
+    const noResponse = document.getElementById("feedback-no");
+    const yesLink = document.getElementById(
+      "feedback-yes-link",
+    ) as HTMLAnchorElement;
+    const noLink = document.getElementById(
+      "feedback-no-link",
+    ) as HTMLAnchorElement;
+    const buttons = component.querySelectorAll(".app-feedback__button");
+
+    const currentPageUrl = window.location.pathname + window.location.search;
+
+    function buildFormUrl(response: "yes" | "no"): string {
+      const params = new URLSearchParams();
+      params.set("url", currentPageUrl);
+      params.set("response", response);
+      return `/feedback?${params.toString()}`;
+    }
+
+    function trackFeedback(response: "yes" | "no"): void {
+      fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          response: response,
+          pageUrl: currentPageUrl,
+          pagePath: window.location.pathname,
+        }),
+      }).catch(() => {});
+    }
+
+    // Set up the form links with the current page URL
+    if (yesLink) yesLink.href = buildFormUrl("yes");
+    if (noLink) noLink.href = buildFormUrl("no");
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", (e) => {
+        const response = (e.currentTarget as HTMLElement).dataset.response as
+          "yes" | "no";
+
+        // Track the response in PostHog
+        trackFeedback(response);
+
+        // Hide the prompt
+        if (prompt) {
+          prompt.classList.add("app-feedback__prompt--hidden");
+        }
+
+        // Show the appropriate response
+        if (response === "yes") {
+          if (yesResponse) {
+            yesResponse.classList.remove("app-feedback__response--hidden");
+          }
+        } else {
+          if (noResponse) {
+            noResponse.classList.remove("app-feedback__response--hidden");
+          }
+        }
+      });
+    });
+  });
+</script>
+
+<style>
+  /* Full-bleed band like the hero and footer; the inner width container keeps
+     the content aligned with the page text. */
+  .app-feedback {
+    margin-top: 30px;
+    background-color: #f0f4f5;
+    border-top: 1px solid var(--govuk-brand-colour);
+  }
+
+  .app-feedback__content {
+    padding-top: 15px;
+    padding-bottom: 15px;
+  }
+
+  .app-feedback__prompt {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .app-feedback__prompt--hidden {
+    display: none;
+  }
+
+  .app-feedback__response--hidden {
+    display: none;
+  }
+
+  .app-feedback__text {
+    font-family: "Inter", Helvetica, Arial, sans-serif;
+    font-size: 1rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .app-feedback__text--bold {
+    font-weight: 700;
+  }
+
+  .app-feedback__response .app-feedback__text + .app-feedback__text {
+    margin-top: 5px;
+  }
+
+  .app-feedback__button {
+    font-family: "Inter", Helvetica, Arial, sans-serif;
+    font-size: 1rem;
+    line-height: 1.25;
+    padding: 8px 20px;
+    background-color: #ffffff;
+    border: 1px solid var(--govuk-text-colour);
+    border-bottom: 3px solid var(--govuk-text-colour);
+    color: var(--govuk-text-colour);
+    cursor: pointer;
+  }
+
+  .app-feedback__button:hover {
+    background-color: #f0f4f5;
+  }
+
+  .app-feedback__button:focus {
+    outline: 3px solid var(--govuk-focus-colour);
+    outline-offset: 0;
+    background-color: var(--govuk-focus-colour);
+    border-color: var(--govuk-text-colour);
+  }
+</style>

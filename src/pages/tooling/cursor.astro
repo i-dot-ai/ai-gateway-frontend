@@ -1,0 +1,176 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import CopyableCode from "../../components/CopyableCode.astro";
+import { InsetText } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<ToolingLayout title="Set up Cursor" currentPath="/tooling/cursor">
+  <h1 class="govuk-heading-xl">Set up Cursor</h1>
+
+  <p class="govuk-body">
+    Cursor is a desktop app built on VS Code. If you connect it to the AI
+    Gateway it will give you access to any{" "}
+    <a class="govuk-link" href="/models">
+      available AI model
+    </a>{" "}
+    (for example, Claude or Gemini).
+  </p>
+
+  <figure class="govuk-!-margin-bottom-6">
+    <img
+      src="/assets/images/gateway-diagram-cursor.svg"
+      alt="Diagram showing Cursor connecting to the AI Gateway, which provides access to Claude, Gemini, GPT and other AI models."
+      class="govuk-!-width-full"
+    />
+  </figure>
+
+  <p class="govuk-body">
+    Before you start, make sure you have{" "}
+    <a class="govuk-link" href="/tooling/get-your-key">
+      your AI Gateway key
+    </a>
+    . Then, to set up Cursor, you need to:
+  </p>
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      <a class="govuk-link" href="#use-admin-permissions">
+        Use admin permissions
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#install-cursor">
+        Install Cursor and add your AI Gateway key
+      </a>
+    </li>
+  </ol>
+
+  <InsetText>
+    These steps work for most setups. If you run into issues you can't resolve,
+    contact us in the #ai-model-gateway-team channel on i.AI Slack.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="use-admin-permissions">
+    Use admin permissions
+  </h2>
+
+  <p class="govuk-body">
+    You need (temporary) admin permissions to install software on your Mac.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Select the padlock icon (<strong>Local Admin Management</strong>) on the
+      top menu bar.
+    </li>
+    <li>
+      Choose <strong>Install an app</strong>.
+    </li>
+    <li>
+      Select <strong>Start session</strong>, and enter your laptop password.
+    </li>
+    <li>
+      Select <strong>OK</strong>.
+    </li>
+  </ol>
+
+  <InsetText>
+    These permissions last for 10 minutes. Select the padlock to request more
+    time.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="install-cursor">
+    Install Cursor and add your AI Gateway key
+  </h2>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Go to the{" "}
+      <a
+        class="govuk-link"
+        href="https://www.cursor.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Cursor website
+      </a>{" "}
+      and select <strong>Download for macOS</strong>.
+    </li>
+    <li>
+      Open <strong>Finder</strong> and select your <strong>Downloads</strong>{" "}
+      folder.
+    </li>
+    <li>
+      To install Cursor, double-click <code class="app-code">Cursor.dmg</code>.
+    </li>
+    <li>
+      Select and drag <strong>Cursor.app</strong> into your{" "}
+      <strong>Applications</strong> folder.
+    </li>
+    <li>
+      Open <strong>Finder</strong> and select your <strong>Applications</strong>{" "}
+      folder.
+    </li>
+    <li>
+      To open Cursor, double-click <strong>Cursor.app</strong>.
+    </li>
+    <li>Create or sign into your Cursor account (and connect to GitHub).</li>
+  </ol>
+
+  <h3 class="govuk-heading-m" id="cursor-add-your-key">
+    Add your key
+  </h3>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Copy your AI Gateway key (
+      <a class="govuk-link" href="/tooling/get-your-key">
+        how to get your key
+      </a>
+      ).
+    </li>
+    <li>
+      Select the <strong>Settings</strong> cog.
+    </li>
+    <li>
+      Select <strong>Models</strong>.
+    </li>
+    <li>
+      Select <strong>API keys</strong>.
+    </li>
+    <li>
+      Under <strong>OpenAI API key</strong>, add your copied AI Gateway key.
+    </li>
+    <li>
+      Toggle on <strong>Override OpenAI Base URL</strong>.
+    </li>
+    <li>
+      Replace <code class="app-code">https://api.openai.com/v1</code> with:
+      <CopyableCode code="https://llm-gateway.i.ai.gov.uk/cursor" />
+    </li>
+    <li>
+      To use Cursor, in the chat window, select <strong>the Cloud</strong> to
+      change it to <strong>This Mac</strong> (unless you have a Pro account).
+    </li>
+  </ol>
+
+  <InsetText>
+    You can ask for a Pro license using the{" "}
+    <a
+      class="govuk-link"
+      href="https://forms.cloud.microsoft/pages/responsepage.aspx?id=BXCsy8EC60O0l-ZJLRst2GyktrFdnG9Gm5KxLIS-QYJURDVQRjZORUxFVUFDRlY2RFZUWE9SWFM4SiQlQCN0PWcu&route=shorturl"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Software Request Form
+    </a>
+    .
+  </InsetText>
+
+  <InsetText>
+    To renew an expired key, repeat the{" "}
+    <a class="govuk-link" href="#cursor-add-your-key">
+      Add your key
+    </a>{" "}
+    steps above with your new key.
+  </InsetText>
+</ToolingLayout>

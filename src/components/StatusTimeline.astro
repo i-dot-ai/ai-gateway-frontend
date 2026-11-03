@@ -1,0 +1,114 @@
+---
+// A CSS-only "down-detector" uptime strip: one thin segment per bucket (an hour
+// for the 24h window, a day for the wider ones), coloured by that bucket's
+// health status. Each segment's native title reveals the figures on hover; the
+// whole track carries a descriptive aria-label (uptime + incident count) so
+// screen-reader users get the summary without tabbing through every segment.
+// Modelled on UsageBars.astro.
+import type { HealthBucket, Granularity } from "../lib/health";
+import { statusLabel, formatUptime, GRANULARITY } from "../lib/health";
+
+export interface Props {
+  segments: HealthBucket[];
+  uptimePct: number | null;
+  granularity: Granularity;
+  /** Buckets with an incident, precomputed by summariseModelHealth. */
+  incidents: number;
+  /** The model name, used only in the strip's accessible label. */
+  label: string;
+}
+
+const { segments, uptimePct, granularity, incidents, label } = Astro.props;
+const g = GRANULARITY[granularity];
+
+// One formatter for the whole strip (building an Intl formatter per segment is
+// the expensive part of locale formatting). A bucket key ("YYYY-MM-DD" or
+// "YYYY-MM-DDTHH") becomes a full UTC instant via the shared key parser.
+const bucketFormat =
+  granularity === "hour"
+    ? new Intl.DateTimeFormat("en-GB", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: "UTC",
+      })
+    : new Intl.DateTimeFormat("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+
+function formatBucket(key: string): string {
+  return bucketFormat.format(new Date(g.keyToIso(key)));
+}
+
+function tooltip(segment: HealthBucket): string {
+  if (segment.status === "no-data")
+    return `${formatBucket(segment.key)}: no health data`;
+  const uptime =
+    segment.uptimePct !== null
+      ? `, ${formatUptime(segment.uptimePct)} uptime`
+      : "";
+  const checks = `, ${segment.total} check${segment.total === 1 ? "" : "s"}`;
+  return `${formatBucket(segment.key)}: ${statusLabel(segment.status)}${uptime}${checks}`;
+}
+
+const unit = g.unit;
+const summary =
+  `${label}: ${formatUptime(uptimePct)} uptime over ${segments.length} ${unit}s` +
+  (incidents
+    ? `, ${incidents} ${unit}${incidents === 1 ? "" : "s"} with incidents`
+    : "");
+---
+
+<span class="app-status-track" role="img" aria-label={summary}>
+  {segments.map((segment) => (
+    <span
+      class:list={["app-status-seg", `app-status-seg--${segment.status}`]}
+      title={tooltip(segment)}
+    />
+  ))}
+</span>
+
+<style>
+  .app-status-track {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    height: 34px;
+    width: 100%;
+  }
+
+  .app-status-seg {
+    flex: 1 1 0;
+    /* A low floor so a dense 90-day strip still fits a narrow container;
+  		   flex-grow widens the segments to fill wider strips (7d/24h). */
+    min-width: 1px;
+    border-radius: 1px;
+    /* No-data is the base colour; healthy/degraded/outage override it. */
+    background-color: #dee0e2;
+    transition: transform 0.05s ease-in-out;
+  }
+
+  /* GOV.UK palette: green / yellow / red for operational / degraded / outage. */
+  .app-status-seg--operational {
+    background-color: var(--govuk-success-colour);
+  }
+
+  .app-status-seg--degraded {
+    background-color: #ffdd00;
+  }
+
+  .app-status-seg--outage {
+    background-color: var(--govuk-error-colour);
+  }
+
+  /* A subtle lift on hover so the hovered bucket (the one the tooltip
+  	   describes) is unmistakable in a dense strip. */
+  .app-status-seg:hover {
+    transform: scaleY(1.12);
+  }
+</style>

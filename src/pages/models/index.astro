@@ -1,0 +1,1017 @@
+---
+import GovukLayout from "../../layouts/GovukLayout.astro";
+import StatusTimeline from "../../components/StatusTimeline.astro";
+import StatusLegend from "../../components/StatusLegend.astro";
+import {
+  Tag,
+  InsetText,
+  Details,
+  DetailsSummary,
+  DetailsText,
+  Button,
+  Table,
+  TableCaption,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableHeader,
+  TableCell,
+} from "@i-dot-ai-npm/component-library-astro";
+import {
+  getAllModels,
+  getModelHealthLatest,
+  getModelHealthHistory,
+} from "../../lib/litellm";
+import {
+  MAX_QUERY_LENGTH,
+  askContext,
+  classifyQuery,
+  describeFilter,
+  filterFromParams,
+  matchesFilter,
+  matchesLookup,
+  normaliseQuery,
+  resolveQuery,
+  COST_TIER_LABELS,
+  MODEL_FAMILIES,
+  USE_CASES,
+  type CostTier,
+} from "../../lib/modelSearch";
+import { logger } from "../../lib/logging";
+import { captureModelSearch } from "../../lib/posthog";
+import { formatDate } from "../../lib/format";
+import {
+  windowDef,
+  bucketKeys,
+  windowStartIso,
+  summariseModelHealth,
+  mergeHealthChecks,
+  formatUptime,
+  statusLabel,
+  STATUS_TAG,
+  type DayStatus,
+  type ModelHealth,
+} from "../../lib/health";
+
+const params = Astro.url.searchParams;
+
+// A single fixed 24-hour hourly window keeps this glanceable and bounds the
+// unscoped all-models history fetch; the wider 90-day history is per-model on
+// the detail page.
+const LIST_WINDOW = "24h" as const;
+const def = windowDef(LIST_WINDOW);
+const keys = bucketKeys(LIST_WINDOW);
+const sinceIso = windowStartIso(LIST_WINDOW);
+
+// Fetch the unfiltered model list (so the provider dropdown lists every
+// provider) and the per-model health in parallel. Each resolves to an
+// { error } result rather than throwing, so a health outage degrades the
+// Status column to "no data" instead of blanking the page.
+const [allModels, latest, history] = await Promise.all([
+  getAllModels(),
+  getModelHealthLatest(),
+  getModelHealthHistory(sinceIso),
+]);
+const providers = [...new Set(allModels.models.map((m) => m.provider))].sort();
+const locations = [
+  ...new Set(
+    allModels.models
+      .map((m) => m.location)
+      .filter((l): l is string => Boolean(l)),
+  ),
+].sort();
+
+// Combine the latest snapshot with the history (the most recent check appears
+// in both) and summarise per model.
+const checks = mergeHealthChecks(latest.checks, history.checks);
+const { models: healthModels, rollup } = summariseModelHealth(
+  checks,
+  allModels.models.map((m) => m.name),
+  keys,
+  def.granularity,
+);
+// Keyed by model name so each table row can look up its own health without
+// reordering the table (which keeps its config order + filter semantics).
+const healthByModel = new Map<string, ModelHealth>(
+  healthModels.map((h) => [h.model, h]),
+);
+
+// The timeline strips are filled from the history call, so surface its failure
+// (a latest-only failure is soft: current status still comes from the history's
+// newest check, and the strips render fine).
+const healthError = history.error;
+
+const query = normaliseQuery(params.get("q"));
+
+// Shared with /models/suggestions, so AI suggestions only name models in the filtered table.
+// Use the validated filter as the single source of truth for all filter values.
+const filter = filterFromParams(params);
+const filtered = allModels.models.filter((m) => matchesFilter(m, filter));
+
+// Validated filter values for UI - use filter.* for cost/family/usecase to ensure
+// invalid params don't render empty tags or count as active filters.
+const selectedProvider = filter.provider;
+const selectedLocation = filter.location;
+const selectedCost = filter.cost;
+const selectedFamily = filter.family;
+const selectedUseCase = filter.usecase;
+const hasVision = filter.vision ?? false;
+const hasReasoning = filter.reasoning ?? false;
+
+// URL for removing a single filter param (used by filter tags)
+const withoutParam = (key: string) => {
+  const p = new URLSearchParams(
+    [...params.entries()].filter(([k]) => k !== key),
+  );
+  return `/models?${p.toString()}`;
+};
+
+// Effective query combines use case with typed search - shared with suggestions.astro
+const effectiveQuery = resolveQuery(params);
+
+// Name lookups ("opus 4.6", "gemini uk") filter the table with no LLM call,
+// falling back to the AI if no single model matches every word. Anything
+// else is a question: the AI suggests and the table stays unfiltered.
+// Use cases always trigger suggestions.
+const question =
+  Boolean(effectiveQuery) &&
+  classifyQuery(effectiveQuery, allModels.models) === "question";
+const keywordHits =
+  effectiveQuery && !question && !selectedUseCase
+    ? filtered.filter((m) => matchesLookup(m, effectiveQuery))
+    : filtered;
+const keywordMiss =
+  Boolean(effectiveQuery) &&
+  !question &&
+  !selectedUseCase &&
+  keywordHits.length === 0;
+const models = keywordMiss ? filtered : keywordHits;
+const showSuggestions = Boolean(selectedUseCase) || question || keywordMiss;
+
+// Name lookups are answered here with no partial fetch, so log them here; questions are logged by /models/suggestions.
+if (query && !showSuggestions) {
+  const email = (await Astro.session?.get("user-email")) ?? "unknown";
+  const search = {
+    query,
+    kind: "lookup" as const,
+    filters: describeFilter(filter),
+    results: models.length,
+  };
+  logger.info({ email, ...search }, "Model search answered");
+  captureModelSearch(email, search);
+}
+
+// What the AI answer will be based on, known before the LLM call, so it shows while waiting.
+const basis = showSuggestions ? askContext(allModels.models) : undefined;
+const basisText = basis
+  ? `Based on ${basis.pages_included} of ${basis.pages_total} provider pages` +
+    (basis.details_updated_at
+      ? `, last updated ${formatDate(basis.details_updated_at, true)}`
+      : " (still being collected)") +
+    (basis.arena_published
+      ? `, and Arena rankings for ${basis.arena_pages} models, published ${formatDate(basis.arena_published)}`
+      : "")
+  : "";
+
+const hasActiveFilters = Boolean(
+  query ||
+  selectedProvider ||
+  selectedLocation ||
+  selectedCost ||
+  selectedFamily ||
+  selectedUseCase ||
+  hasVision ||
+  hasReasoning,
+);
+
+// Overall status banner from the roll-up.
+const banner: { tag: (typeof STATUS_TAG)[DayStatus]; text: string } = (() => {
+  if (rollup.down > 0) {
+    return {
+      tag: "red",
+      text: `${rollup.down} model${rollup.down === 1 ? "" : "s"} down`,
+    };
+  }
+  if (rollup.recentIncidents > 0) {
+    return {
+      tag: "yellow",
+      text: `${rollup.recentIncidents} model${rollup.recentIncidents === 1 ? "" : "s"} with recent incidents`,
+    };
+  }
+  if (rollup.modelsWithData === 0) {
+    return { tag: "grey", text: "No health data yet" };
+  }
+  return { tag: "green", text: "All models operational" };
+})();
+
+// The current-status tag shown against each model in the Status column.
+function currentLabel(status: DayStatus): string {
+  return status === "outage"
+    ? "Down"
+    : status === "operational"
+      ? "OK"
+      : statusLabel(status);
+}
+---
+
+<GovukLayout title="Available models">
+  <h1 class="govuk-heading-l">Available models</h1>
+
+  <p class="govuk-body">
+    These are the language models available through the LLM Gateway.
+  </p>
+
+  <p class="govuk-body">
+    Select a model's name to see more information, such as cost and token
+    limits.
+  </p>
+
+  {/* Horizontal filter form */}
+  <form method="get" class="app-filter-bar" aria-label="Filter models">
+    <div class="app-filter-bar__row">
+      <div class="app-filter-bar__field">
+        <label class="govuk-label govuk-label--s" for="q">
+          Search
+        </label>
+        <input
+          class="govuk-input"
+          id="q"
+          name="q"
+          type="search"
+          value={query}
+          maxlength={MAX_QUERY_LENGTH}
+          placeholder="Model or question"
+        />
+      </div>
+      <div class="app-filter-bar__field">
+        <label class="govuk-label govuk-label--s" for="family">
+          Model family
+        </label>
+        <select class="govuk-select" id="family" name="family">
+          <option value="">All families</option>
+          {MODEL_FAMILIES.map(({ id, label }) => (
+            <option value={id} selected={id === selectedFamily}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div class="app-filter-bar__field">
+        <label class="govuk-label govuk-label--s" for="provider">
+          Provider
+        </label>
+        <select class="govuk-select" id="provider" name="provider">
+          <option value="">All providers</option>
+          {providers.map((p) => (
+            <option value={p} selected={p === selectedProvider}>
+              {p}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div class="app-filter-bar__field">
+        <label class="govuk-label govuk-label--s" for="location">
+          Location
+        </label>
+        <select class="govuk-select" id="location" name="location">
+          <option value="">All locations</option>
+          {locations.map((l) => (
+            <option value={l} selected={l === selectedLocation}>
+              {l}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+
+    <div class="app-filter-bar__row">
+      <div class="app-filter-bar__field">
+        <label class="govuk-label govuk-label--s" for="cost">
+          Cost
+        </label>
+        <select class="govuk-select" id="cost" name="cost">
+          <option value="">All costs</option>
+          {(Object.entries(COST_TIER_LABELS) as [CostTier, string][]).map(
+            ([value, label]) => (
+              <option value={value} selected={value === selectedCost}>
+                {label}
+              </option>
+            ),
+          )}
+        </select>
+      </div>
+      <div class="app-filter-bar__field">
+        <label class="govuk-label govuk-label--s" for="usecase">
+          Use case
+        </label>
+        <select class="govuk-select" id="usecase" name="usecase">
+          <option value="">All use cases</option>
+          {USE_CASES.map(({ id, label }) => (
+            <option value={id} selected={id === selectedUseCase}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div class="app-filter-bar__field app-filter-bar__field--capabilities">
+        <fieldset class="govuk-fieldset">
+          <legend class="govuk-visually-hidden">Capabilities</legend>
+          <div
+            class="govuk-checkboxes govuk-checkboxes--small"
+            data-module="govuk-checkboxes"
+          >
+            <div class="govuk-checkboxes__item">
+              <input
+                class="govuk-checkboxes__input"
+                type="checkbox"
+                id="vision"
+                name="vision"
+                value="true"
+                checked={hasVision}
+              />
+              <label class="govuk-label govuk-checkboxes__label" for="vision">
+                Vision
+              </label>
+            </div>
+            <div class="govuk-checkboxes__item">
+              <input
+                class="govuk-checkboxes__input"
+                type="checkbox"
+                id="reasoning"
+                name="reasoning"
+                value="true"
+                checked={hasReasoning}
+              />
+              <label
+                class="govuk-label govuk-checkboxes__label"
+                for="reasoning"
+              >
+                Reasoning
+              </label>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+      <div class="app-filter-bar__field app-filter-bar__field--button">
+        <button type="submit" class="govuk-button" data-module="govuk-button">
+          Apply filters
+        </button>
+      </div>
+    </div>
+  </form>
+
+  {/* Selected filters (removable tags) */}
+  {hasActiveFilters && (
+    <div class="app-filter-tags">
+      <h3 class="govuk-heading-s govuk-!-margin-bottom-2">Selected filters</h3>
+      <ul class="app-filter-tags__list">
+        {query && (
+          <li>
+            <a class="app-filter-tags__tag" href={withoutParam("q")}>
+              {query} <span aria-hidden="true">✕</span>
+              <span class="govuk-visually-hidden">(remove filter)</span>
+            </a>
+          </li>
+        )}
+        {selectedFamily && (
+          <li>
+            <a class="app-filter-tags__tag" href={withoutParam("family")}>
+              {MODEL_FAMILIES.find((f) => f.id === selectedFamily)?.label}{" "}
+              <span aria-hidden="true">✕</span>
+              <span class="govuk-visually-hidden">(remove filter)</span>
+            </a>
+          </li>
+        )}
+        {selectedProvider && (
+          <li>
+            <a class="app-filter-tags__tag" href={withoutParam("provider")}>
+              {selectedProvider} <span aria-hidden="true">✕</span>
+              <span class="govuk-visually-hidden">(remove filter)</span>
+            </a>
+          </li>
+        )}
+        {selectedLocation && (
+          <li>
+            <a class="app-filter-tags__tag" href={withoutParam("location")}>
+              {selectedLocation} <span aria-hidden="true">✕</span>
+              <span class="govuk-visually-hidden">(remove filter)</span>
+            </a>
+          </li>
+        )}
+        {selectedCost && (
+          <li>
+            <a class="app-filter-tags__tag" href={withoutParam("cost")}>
+              {COST_TIER_LABELS[selectedCost]} <span aria-hidden="true">✕</span>
+              <span class="govuk-visually-hidden">(remove filter)</span>
+            </a>
+          </li>
+        )}
+        {selectedUseCase && (
+          <li>
+            <a class="app-filter-tags__tag" href={withoutParam("usecase")}>
+              {USE_CASES.find((u) => u.id === selectedUseCase)?.label}{" "}
+              <span aria-hidden="true">✕</span>
+              <span class="govuk-visually-hidden">(remove filter)</span>
+            </a>
+          </li>
+        )}
+        {hasVision && (
+          <li>
+            <a class="app-filter-tags__tag" href={withoutParam("vision")}>
+              Vision <span aria-hidden="true">✕</span>
+              <span class="govuk-visually-hidden">(remove filter)</span>
+            </a>
+          </li>
+        )}
+        {hasReasoning && (
+          <li>
+            <a class="app-filter-tags__tag" href={withoutParam("reasoning")}>
+              Reasoning <span aria-hidden="true">✕</span>
+              <span class="govuk-visually-hidden">(remove filter)</span>
+            </a>
+          </li>
+        )}
+      </ul>
+      <p class="govuk-body-s govuk-!-margin-top-2 govuk-!-margin-bottom-0">
+        <a class="govuk-link govuk-link--no-visited-state" href="/models">
+          Clear all filters
+        </a>
+      </p>
+    </div>
+  )}
+
+  {showSuggestions && (
+    <section
+      class="app-suggestions"
+      id="model-suggestions"
+      aria-labelledby="suggestions-heading"
+    >
+      <div class="app-suggestions__header">
+        <h2
+          class="govuk-heading-s govuk-!-margin-bottom-0"
+          id="suggestions-heading"
+        >
+          Suggested models <span class="app-suggestions__count" />
+        </h2>
+        <Tag colour="grey">AI generated</Tag>
+      </div>
+      {/* Short announcements only: the cards themselves are not read out as they arrive. */}
+      <p class="govuk-body-s app-suggestions__status" role="status">
+        Comparing {filtered.length} models using provider pages and Arena
+        rankings. This usually takes a few seconds.
+        <span class="app-suggestions__elapsed" />
+      </p>
+      <Details class="app-suggestions__details" open>
+        <DetailsSummary>Show suggestions</DetailsSummary>
+        <DetailsText class="app-suggestions__body">
+          <ul
+            class="govuk-list app-suggestions__placeholders"
+            aria-hidden="true"
+          >
+            {[0, 1, 2].map(() => (
+              <li class="app-placeholder">
+                <span class="app-placeholder__bar app-placeholder__bar--title" />
+                <span class="app-placeholder__bar" />
+                <span class="app-placeholder__bar app-placeholder__bar--short" />
+              </li>
+            ))}
+          </ul>
+          <div class="app-suggestions__list" hidden />
+          {basis && (
+            <p class="govuk-body-s app-suggestions__basis">
+              {basisText}
+              {basis.arena_published ? (
+                <Fragment>
+                  {" "}
+                  (
+                  <a
+                    class="govuk-link"
+                    href={basis.arena_dataset_url}
+                    rel="noopener noreferrer"
+                  >
+                    Arena leaderboard data, {basis.arena_licence}
+                  </a>
+                  ).
+                </Fragment>
+              ) : (
+                "."
+              )}
+            </p>
+          )}
+          <div class="app-suggestions__note" hidden>
+            <p class="govuk-body-s govuk-!-margin-bottom-0">
+              Suggestions are generated from provider documentation and may be
+              wrong. Check a model's details before you use it.
+            </p>
+            <Button
+              type="button"
+              secondary
+              class="govuk-!-margin-bottom-0 app-suggestions__only"
+              aria-pressed="false"
+            >
+              Show only these
+            </Button>
+          </div>
+          <noscript>
+            <p class="govuk-body-s">
+              Suggestions need JavaScript. Keyword results are shown below.
+            </p>
+          </noscript>
+        </DetailsText>
+      </Details>
+    </section>
+  )}
+
+  {keywordMiss && (
+    <p class="govuk-body" id="keyword-miss">
+      No single model matches "{query}" by name, so all models are shown.
+    </p>
+  )}
+  {question && (
+    <p class="govuk-body" id="keyword-miss">
+      All models are shown. Select "Show only these" to see just the
+      suggestions.
+    </p>
+  )}
+
+  <div class="app-status-bar">
+    <Tag colour={banner.tag}>{banner.text}</Tag>
+    <StatusLegend />
+  </div>
+
+  {healthError && (
+    <InsetText>
+      Model health data is currently unavailable ({healthError}). The Status
+      column shows no data until it returns.
+    </InsetText>
+  )}
+
+  <Table class="app-models-table app-table--stacked">
+    <TableCaption class="govuk-visually-hidden">
+      Models available on the LLM Gateway, with each model's availability over
+      the last {def.label}
+    </TableCaption>
+    <TableHead>
+      <TableRow>
+        <TableHeader>Model</TableHeader>
+        <TableHeader class="app-col--wide">Provider</TableHeader>
+        <TableHeader>Location</TableHeader>
+        <TableHeader class="app-status-col">24hr status</TableHeader>
+      </TableRow>
+    </TableHead>
+    <TableBody>
+      {models.map((m) => {
+        const health = healthByModel.get(m.name);
+        return (
+          <TableRow data-model-name={m.name}>
+            <TableCell>
+              <a class="govuk-link" href={`/models/${m.id}`}>
+                {m.name}
+              </a>
+              {/* On mobile, show provider in meta row */}
+              <span class="govuk-body-s app-model-meta">{m.provider}</span>
+            </TableCell>
+            <TableCell class="app-col--wide">{m.provider}</TableCell>
+            <TableCell class="app-cell--location" data-label="Location">
+              {m.location}
+            </TableCell>
+            <TableCell class="app-status-col" data-label="24hr status">
+              {health && (
+                <div class="app-status-cell">
+                  <Tag colour={STATUS_TAG[health.currentStatus]}>
+                    {currentLabel(health.currentStatus)}
+                  </Tag>
+                  <span class="govuk-body-s app-status-cell__uptime">
+                    {formatUptime(health.uptimePct)}
+                  </span>
+                  <StatusTimeline
+                    segments={health.segments}
+                    uptimePct={health.uptimePct}
+                    granularity={def.granularity}
+                    incidents={health.incidents}
+                    label={m.name}
+                  />
+                </div>
+              )}
+            </TableCell>
+          </TableRow>
+        );
+      })}
+    </TableBody>
+  </Table>
+
+  <p class="govuk-body app-results-count">
+    Showing <span id="results-count">{models.length}</span> of{" "}
+    {allModels.models.length} models
+    {query && !question && !keywordMiss ? ` matching "${query}"` : ""}
+  </p>
+</GovukLayout>
+
+<script>
+  // Cards are rendered server-side by /models/suggestions (GOV.UK summary
+  // cards); this only fetches them, shows progress and wires "Show only these".
+  const panel = document.getElementById("model-suggestions");
+  if (panel) {
+    const status = panel.querySelector<HTMLElement>(
+      ".app-suggestions__status",
+    )!;
+    const list = panel.querySelector<HTMLElement>(".app-suggestions__list")!;
+    const note = panel.querySelector<HTMLElement>(".app-suggestions__note")!;
+    const onlyButton = panel.querySelector<HTMLButtonElement>(
+      ".app-suggestions__only",
+    )!;
+    const placeholders = panel.querySelector<HTMLElement>(
+      ".app-suggestions__placeholders",
+    )!;
+    const elapsed = panel.querySelector<HTMLElement>(
+      ".app-suggestions__elapsed",
+    )!;
+    const count = document.getElementById("results-count");
+    const summaryCount = panel.querySelector<HTMLElement>(
+      ".app-suggestions__count",
+    )!;
+
+    const started = Date.now();
+    const timer = setInterval(() => {
+      const s = Math.round((Date.now() - started) / 1000);
+      if (s >= 3) elapsed.textContent = `(${s} seconds)`;
+    }, 1000);
+    // The status line is the only live region, so screen readers hear one short message.
+    const finish = (message: string) => {
+      clearInterval(timer);
+      placeholders.remove();
+      status.textContent = message;
+    };
+
+    // The page's own query string carries q and the filters.
+    fetch(`/models/suggestions${window.location.search}`)
+      .then((r) => r.text())
+      .then((html) => {
+        list.innerHTML = html; // server-rendered and escaped by Astro
+        list.hidden = false;
+        const names = new Set(
+          [...list.querySelectorAll<HTMLElement>("[data-model-name]")].map(
+            (c) => c.dataset.modelName ?? "",
+          ),
+        );
+        if (names.size === 0) {
+          finish(list.textContent?.trim() || "No suggestions.");
+          return;
+        }
+        finish(`${names.size} suggestion${names.size === 1 ? "" : "s"} ready.`);
+        summaryCount.textContent = `(${names.size})`;
+        note.hidden = false;
+
+        // Toggles the table between the suggestions and the full list.
+        const miss = document.getElementById("keyword-miss");
+        let onlySuggested = false;
+        onlyButton.addEventListener("click", () => {
+          onlySuggested = !onlySuggested;
+          let shown = 0;
+          for (const row of document.querySelectorAll<HTMLElement>(
+            "tr[data-model-name]",
+          )) {
+            row.hidden =
+              onlySuggested && !names.has(row.dataset.modelName ?? "");
+            if (!row.hidden) shown++;
+          }
+          if (count) count.textContent = String(shown);
+          if (miss) miss.hidden = onlySuggested;
+          onlyButton.textContent = onlySuggested
+            ? "Show all models"
+            : "Show only these";
+          onlyButton.setAttribute("aria-pressed", String(onlySuggested));
+          status.textContent = onlySuggested
+            ? `Showing ${shown} suggested models.`
+            : `Showing all ${shown} models.`;
+        });
+      })
+      .catch(() => {
+        finish(
+          "Suggestions are unavailable right now. The full list of models is below.",
+        );
+      });
+  }
+</script>
+
+<style>
+  /* Horizontal filter bar - white background */
+  .app-filter-bar {
+    padding: 15px 15px 20px;
+    background-color: var(--govuk-body-background-colour);
+    border: 1px solid var(--govuk-border-colour);
+    margin-bottom: 20px;
+  }
+
+  /* When selected filters appear directly after, connect them */
+  .app-filter-bar:has(+ .app-filter-tags) {
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+
+  /* Fields wrap to the next line on narrow screens rather than squashing. */
+  .app-filter-bar__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 15px;
+    margin-bottom: 15px;
+  }
+
+  .app-filter-bar__row:last-child {
+    margin-bottom: 0;
+  }
+
+  .app-filter-bar__field {
+    flex: 1 1 160px;
+    min-width: 140px;
+  }
+
+  .app-filter-bar .govuk-label {
+    margin-bottom: 5px;
+  }
+
+  .app-filter-bar .govuk-select,
+  .app-filter-bar .govuk-input {
+    width: 100%;
+    margin-bottom: 0;
+  }
+
+  .app-filter-bar .govuk-button {
+    margin-bottom: 0;
+  }
+
+  /* Capabilities share the row with the selects; the checkboxes wrap on narrow
+     screens instead of overflowing. Vertically centred against the select boxes. */
+  .app-filter-bar__field--capabilities {
+    display: flex;
+    align-items: center;
+  }
+
+  .app-filter-bar__field--capabilities .govuk-checkboxes--small {
+    display: flex;
+    flex-direction: row;
+    gap: 15px;
+  }
+
+  .app-filter-bar__field--capabilities .govuk-checkboxes__item {
+    margin-bottom: 0;
+  }
+
+  .app-filter-bar__field--button {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+  }
+
+  /* Selected filter tags - grey background, connects to filter bar above */
+  .app-filter-tags {
+    margin-bottom: 20px;
+    padding: 15px 15px 19px;
+    background-color: var(--govuk-surface-background-colour);
+    border: 1px solid var(--govuk-border-colour);
+  }
+
+  .app-filter-tags__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .app-filter-tags__tag {
+    display: inline-block;
+    padding: 5px 10px;
+    background-color: var(--govuk-body-background-colour);
+    color: var(--govuk-text-colour);
+    text-decoration: none;
+    font-size: 0.875rem;
+    border: 1px solid var(--govuk-text-colour);
+  }
+
+  .app-filter-tags__tag:hover {
+    background-color: var(--govuk-hover-colour);
+  }
+
+  .app-filter-tags__tag:focus {
+    outline: 3px solid var(--govuk-focus-colour);
+    outline-offset: 0;
+    background-color: var(--govuk-focus-colour);
+    color: var(--govuk-focus-text-colour);
+  }
+
+  .app-suggestions {
+    padding: 15px 20px;
+    margin-bottom: 20px;
+    border-left: 5px solid #1d70b8;
+    background-color: #f3f8fc;
+  }
+
+  .app-suggestions__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .app-suggestions__count {
+    font-weight: 400;
+  }
+
+  .app-suggestions__list {
+    margin-bottom: 10px;
+  }
+
+  /* GOV.UK details inside the panel: the panel already has a left border. */
+  .app-suggestions__details {
+    margin-bottom: 0;
+  }
+
+  .app-suggestions__body {
+    padding: 15px 0 0;
+    border-left: 0;
+  }
+
+  /* Responsive table: fewer columns on smaller screens with their values
+  	   moved under the model name, and stacked rows on phones (app-table--stacked
+  	   in styles/idotai.scss). GOV.UK breakpoints: tablet 641px (40.0625em),
+  	   desktop 769px (48.0625em). */
+  .app-model-meta {
+    display: none;
+    margin: 2px 0 0;
+    color: #505a5f;
+  }
+
+  @media (max-width: 48.0525em) {
+    .app-col--wide {
+      display: none;
+    }
+
+    .app-model-meta {
+      display: block;
+    }
+  }
+
+  /* Phones: location and status side by side under the full-width model cell. */
+  @media (max-width: 40.0525em) {
+    .app-models-table tr {
+      grid-template-columns: auto 1fr;
+    }
+
+    .app-models-table .app-status-col {
+      width: auto;
+      min-width: 0;
+    }
+  }
+
+  /* Keep the table within the page width: long model names may break, and
+  	   the summary wraps to the column rather than setting its width. */
+  /* Column alignment: Model and Provider left, rest centred */
+  /* Columns: Model (33%), Provider (18%), Location (10%), 24hr status (39%) */
+  .app-models-table {
+    table-layout: fixed;
+  }
+
+  .app-models-table :global(.govuk-table__header),
+  .app-models-table :global(.govuk-table__cell) {
+    text-align: center !important;
+  }
+
+  .app-models-table :global(.govuk-table__header:nth-child(1)) {
+    text-align: left !important;
+    width: 33%;
+  }
+
+  .app-models-table :global(.govuk-table__header:nth-child(2)) {
+    text-align: left !important;
+    width: 18%;
+    word-wrap: break-word;
+  }
+
+  .app-models-table :global(.govuk-table__header:nth-child(3)) {
+    width: 10%;
+    text-align: center !important;
+  }
+
+  .app-models-table :global(.govuk-table__cell:nth-child(3)) {
+    text-align: center !important;
+  }
+
+  /* 24hr status column gets remaining width */
+
+  .app-models-table :global(.govuk-table__cell:nth-child(1)),
+  .app-models-table :global(.govuk-table__cell:nth-child(2)) {
+    text-align: left !important;
+    word-wrap: break-word;
+  }
+
+  .app-models-table td:first-child a {
+    overflow-wrap: anywhere;
+  }
+
+  .app-placeholder {
+    margin-bottom: 15px;
+  }
+
+  .app-placeholder__bar {
+    display: block;
+    height: 12px;
+    margin-bottom: 6px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #dde2e6 25%, #eef1f3 50%, #dde2e6 75%);
+    background-size: 200% 100%;
+    animation: app-shimmer 1.4s ease-in-out infinite;
+  }
+
+  .app-placeholder__bar--title {
+    width: 30%;
+    height: 16px;
+  }
+
+  .app-placeholder__bar--short {
+    width: 60%;
+  }
+
+  @keyframes app-shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-placeholder__bar {
+      animation: none;
+    }
+  }
+
+  .app-suggestions__note[hidden] {
+    display: none;
+  }
+
+  .app-suggestions__note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 20px;
+    margin-bottom: 0;
+  }
+
+  .app-results-count {
+    color: var(--govuk-secondary-text-colour);
+    margin-top: 0;
+  }
+
+  /* --- Model health ("down-detector") status column --- */
+  .app-status-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 20px;
+    margin-bottom: 15px;
+  }
+
+  .app-status-bar :global(.govuk-tag) {
+    font-size: 1rem;
+    padding: 5px 10px;
+  }
+
+  .app-status-col {
+    white-space: nowrap;
+  }
+
+  .app-status-cell {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .app-status-cell__uptime {
+    margin: 0;
+    color: var(--govuk-secondary-text-colour);
+    white-space: nowrap;
+  }
+
+  /* A compact tag for the dense status cell (GOV.UK has no size modifier). */
+  .app-status-cell :global(.govuk-tag) {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    line-height: 1.4;
+  }
+
+  /* On narrow screens let the column shrink so the table stays usable. */
+  @media (max-width: 640px) {
+    .app-status-col {
+      min-width: 130px;
+    }
+  }
+</style>

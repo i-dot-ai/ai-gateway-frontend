@@ -1,0 +1,186 @@
+// i.AI Design Kit entry point.
+//
+// GOV.UK Frontend compiled with the i.AI brand settings from the design kit,
+// then the i.AI Design System override layer on top. This is the recommended
+// way to adapt GOV.UK Frontend for services that are not on the gov.uk domain.
+// See: https://frontend.design-system.service.gov.uk/using-govuk-frontend-without-govuk-branding/
+// and the i.AI Design Kit "Apply the kit to an existing product" guide.
+//
+// Assets (fonts/images) are served from /assets, copied from
+// node_modules/govuk-frontend/dist/govuk/assets into public/assets.
+@use "@i-dot-ai-npm/component-library-frontend/settings" as iai;
+@use "govuk-frontend/dist/govuk/index" as * with (
+	$govuk-assets-path: "/assets/",
+	$govuk-font-family: iai.$iai-font-family,
+	$govuk-functional-colours: iai.$iai-functional-colours
+);
+
+// i.AI override layer — must come after govuk-frontend's base styles.
+@use "@i-dot-ai-npm/component-library-frontend/css";
+
+// =============================================================================
+// Application-specific styles (not part of the Design Kit)
+// =============================================================================
+
+// Sidebar navigation (GOV.UK Tech Docs Template style)
+.app-sidebar {
+	@media (min-width: 48.0625em) {
+		padding-right: 20px;
+	}
+
+	@media (max-width: 48.0625em) {
+		margin-bottom: 30px;
+		border-bottom: 1px solid govuk-functional-colour("border");
+		padding-bottom: 20px;
+	}
+}
+
+
+// Sticky sidebar on larger screens
+@media (min-width: 48.0625em) {
+	.app-sidebar--sticky {
+		position: sticky;
+		top: 20px;
+		max-height: calc(100vh - 40px);
+		overflow-y: auto;
+	}
+}
+
+// =============================================================================
+// Code blocks (GOV.UK Design System style with copy button)
+// =============================================================================
+
+.app-code-block {
+	margin: 15px 0 20px 0;
+	position: relative;
+	background-color: govuk-colour("black", $variant: "tint-95");
+	padding: 15px 15px 0 15px;
+}
+
+.app-code-block__copy-button {
+	position: absolute;
+	top: 15px;
+	right: 15px;
+	width: auto;
+	margin: 0;
+
+	// Copied state
+	&.app-code-block__copy-button--copied {
+		background-color: govuk-colour("white");
+		color: govuk-functional-colour("link");
+		border-color: govuk-functional-colour("link");
+		outline: 3px solid $govuk-focus-colour;
+		outline-offset: 0;
+	}
+}
+
+.app-code-block__pre {
+	font-family: ui-monospace, Menlo, Monaco, "Cascadia Mono", "Segoe UI Mono", "Roboto Mono", "Oxygen Mono", "Ubuntu Monospace", "Source Code Pro", "Fira Mono", "Droid Sans Mono", "Courier New", monospace;
+	font-size: 0.875rem;
+	line-height: 1.6;
+	margin: 0;
+	padding: 45px 0 15px 0;
+	overflow-x: auto;
+	background-color: transparent;
+	color: govuk-functional-colour("text");
+	white-space: pre;
+	tab-size: 2;
+}
+
+.app-code-block__code {
+	font-family: inherit;
+	font-size: inherit;
+}
+
+// Inline code (for use within paragraphs)
+// Use: <code class="app-code">some_variable</code>
+.app-code {
+	font-family: ui-monospace, Menlo, Monaco, "Cascadia Mono", "Segoe UI Mono", "Roboto Mono", "Oxygen Mono", "Ubuntu Monospace", "Source Code Pro", "Fira Mono", "Droid Sans Mono", "Courier New", monospace;
+	font-size: 0.875em;
+	padding: 0 4px;
+	background-color: govuk-colour("black", $variant: "tint-95");
+	color: govuk-colour("red", $variant: "shade-25");
+}
+
+// Inline code for variables/placeholders (coloured, like <project_name>)
+// Use: <code class="app-code app-code--variable">&lt;project_name&gt;</code>
+.app-code--variable {
+	color: govuk-colour("red", $variant: "shade-25");
+}
+
+
+// =============================================================================
+// Stacked tables: on phones each row becomes a block, the first cell across
+// the full width and the rest labelled by their data-label. Pages set
+// grid-template-columns for the cells after the first. Headers stay in the
+// accessibility tree but are hidden visually.
+// =============================================================================
+
+@media (max-width: 40.0525em) {
+	.app-table--stacked,
+	.app-table--stacked tbody {
+		display: block;
+	}
+
+	.app-table--stacked thead {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.app-table--stacked .govuk-table__row {
+		display: grid;
+		column-gap: 20px;
+		padding: 10px 0;
+		border-bottom: 1px solid #b1b4b6;
+	}
+
+	.app-table--stacked .govuk-table__row[hidden] {
+		display: none;
+	}
+
+	.app-table--stacked .govuk-table__cell {
+		padding: 0;
+		border: 0;
+		text-align: left;
+	}
+
+	.app-table--stacked .govuk-table__cell:first-child {
+		grid-column: 1 / -1;
+		margin-bottom: 8px;
+	}
+
+	.app-table--stacked .govuk-table__cell[data-label]::before {
+		content: attr(data-label);
+		display: block;
+		font-size: 1rem;
+		font-weight: 700;
+	}
+}
+
+// =============================================================================
+// Model suggestion cards (components/ModelSuggestionCard.astro). Global because
+// the cards arrive as a fetched fragment, so the component's own styles would
+// never be loaded on the page.
+// =============================================================================
+
+.app-suggestion-card {
+	background-color: #fff;
+}
+
+.app-suggestion-card__title {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 5px 10px;
+}
+
+.app-suggestion-card__position {
+	color: #505a5f;
+}
+
+.app-suggestion-card__reason {
+	margin-bottom: 15px;
+}

@@ -1,0 +1,99 @@
+---
+import GovukLayout from "../layouts/GovukLayout.astro";
+import {
+  Panel,
+  PanelTitle,
+  PanelBody,
+  ErrorSummary,
+  ErrorSummaryTitle,
+  ErrorSummaryBody,
+  FormGroup,
+  Label,
+  Hint,
+  Textarea,
+  Button,
+} from "@i-dot-ai-npm/component-library-astro";
+import Input from "../components/Input.astro";
+import { safePath } from "../lib/safePath";
+
+// Get pre-filled values from URL params
+const pageUrl = safePath(Astro.url.searchParams.get("url"));
+const initialResponse = Astro.url.searchParams.get("response") || "";
+
+// Get any flash messages from form submission
+const successMessage = await Astro.session?.get("feedback-success");
+const errorMessage = await Astro.session?.get("feedback-error");
+
+// Clear flash messages after reading
+if (successMessage) await Astro.session?.delete("feedback-success");
+if (errorMessage) await Astro.session?.delete("feedback-error");
+---
+
+<GovukLayout title="Give feedback">
+  {successMessage ? (
+    <>
+      <Panel>
+        <PanelTitle>Thank you for your feedback</PanelTitle>
+        <PanelBody>Your feedback helps us improve the AI Gateway.</PanelBody>
+      </Panel>
+      <p class="govuk-body govuk-!-margin-top-6">
+        <a class="govuk-link" href={pageUrl}>
+          Return to the page you were viewing
+        </a>
+      </p>
+    </>
+  ) : (
+    <>
+      <h1 class="govuk-heading-l">Help us improve the AI Gateway site</h1>
+      <p class="govuk-body">We'd like to know more about your experience.</p>
+
+      {errorMessage && (
+        <ErrorSummary>
+          <ErrorSummaryTitle>There is a problem</ErrorSummaryTitle>
+          <ErrorSummaryBody>
+            <p class="govuk-body">{errorMessage}</p>
+          </ErrorSummaryBody>
+        </ErrorSummary>
+      )}
+
+      <form
+        method="POST"
+        action="/api/feedback/submit"
+        class="govuk-!-margin-top-6"
+      >
+        <input type="hidden" name="pageUrl" value={pageUrl} />
+        <input type="hidden" name="response" value={initialResponse} />
+
+        <FormGroup>
+          <Label size="medium" for="liked">
+            What did you like?
+          </Label>
+          <Textarea id="liked" name="liked" rows="4" />
+        </FormGroup>
+
+        <FormGroup>
+          <Label size="medium" for="improve">
+            How can we improve?
+          </Label>
+          <Textarea id="improve" name="improve" rows="4" />
+        </FormGroup>
+
+        <FormGroup>
+          <Label size="medium" for="email">
+            What is your email? (optional)
+          </Label>
+          <Hint>So we can follow up about your feedback.</Hint>
+          <Input
+            width="20"
+            id="email"
+            name="contactEmail"
+            type="email"
+            autocomplete="email"
+          />
+        </FormGroup>
+
+        <Button type="submit">Share feedback</Button>
+      </form>
+    </>
+  )}
+</GovukLayout>
