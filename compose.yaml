@@ -23,7 +23,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: litellm
-      POSTGRES_PASSWORD: litellm
+      POSTGRES_PASSWORD: litellm  # pragma: allowlist secret
       POSTGRES_DB: litellm
     volumes:
       - litellm-db:/var/lib/postgresql/data
@@ -44,7 +44,7 @@ services:
       - ./litellm-config.yaml:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
-      DATABASE_URL: postgresql://litellm:litellm@db:5432/litellm
+      DATABASE_URL: postgresql://litellm:litellm@db:5432/litellm  # pragma: allowlist secret
       LITELLM_MASTER_KEY: sk-local-dev
       # Dummy by default; export the real ones to call the providers.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-sk-noop}
