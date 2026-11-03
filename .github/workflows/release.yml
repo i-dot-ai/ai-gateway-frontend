@@ -1,4 +1,4 @@
-# Build and publish the frontend image to AWS ECR (core-llm-gateway-frontend)
+# Build and publish the frontend image to AWS ECR (ai-gateway-frontend)
 # when a GitHub Release is published.
 #
 # This mirrors the i.AI deployment pattern used by core-llm-gateway and minute:
@@ -15,7 +15,7 @@
 # The OIDC role
 #   arn:aws:iam::<AWS_ACCOUNT_ID>:role/infra/i-dot-ai-prod-<APP_NAME>-ci-deployment-role
 # must exist and trust this repository, and be allowed to push to the
-# core-llm-gateway-frontend ECR repository.
+# ai-gateway-frontend ECR repository.
 name: release
 
 on:
@@ -23,7 +23,7 @@ on:
     types: [published]
 
 env:
-  ECR_REPO_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/core-llm-gateway-frontend
+  ECR_REPO_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/ai-gateway-frontend
 
 jobs:
   set-vars:
