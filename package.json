@@ -10,6 +10,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
+    "mock:litellm": "node mock/litellm.mjs",
     "lint": "astro check",
     "format": "prettier --write \"src/**/*.astro\"",
     "format:check": "prettier --check \"src/**/*.astro\"",

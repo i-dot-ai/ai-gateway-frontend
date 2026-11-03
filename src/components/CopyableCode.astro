@@ -1,0 +1,87 @@
+---
+/**
+ * Copyable code block component
+ * Styled to match GOV.UK Design System
+ *
+ * Usage:
+ * <CopyableCode code="npm install something" />
+ *
+ * For multi-line:
+ * <CopyableCode code={`line 1
+ * line 2`} />
+ */
+import { Button } from "@i-dot-ai-npm/component-library-astro";
+
+export interface Props {
+  code: string;
+}
+
+const { code } = Astro.props;
+
+// Generate unique ID for this code block
+const id = `code-${Math.random().toString(36).substring(2, 9)}`;
+---
+
+<div class="app-code-block">
+  <Button
+    type="button"
+    tertiary
+    small
+    class="app-code-block__copy-button"
+    data-copy-target={id}
+    aria-live="polite"
+  >
+    Copy code
+  </Button>
+  <pre
+    class="app-code-block__pre"
+    id={id}
+  ><code class="app-code-block__code">{code}</code></pre>
+</div>
+
+<script>
+  // Handle copy button clicks
+  document.addEventListener("click", async (e) => {
+    const button = (e.target as HTMLElement).closest(
+      ".app-code-block__copy-button",
+    );
+    if (!button) return;
+
+    const targetId = button.getAttribute("data-copy-target");
+    if (!targetId) return;
+
+    const codeElement = document.getElementById(targetId);
+    if (!codeElement) return;
+
+    const code = codeElement.textContent || "";
+
+    try {
+      await navigator.clipboard.writeText(code);
+      button.textContent = "Code copied";
+      button.classList.add("app-code-block__copy-button--copied");
+
+      setTimeout(() => {
+        button.textContent = "Copy code";
+        button.classList.remove("app-code-block__copy-button--copied");
+      }, 2000);
+    } catch (err) {
+      // Fallback for older browsers
+      const textarea = document.createElement("textarea");
+      textarea.value = code;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+
+      button.textContent = "Code copied";
+      button.classList.add("app-code-block__copy-button--copied");
+
+      setTimeout(() => {
+        button.textContent = "Copy code";
+        button.classList.remove("app-code-block__copy-button--copied");
+      }, 2000);
+    }
+  });
+</script>

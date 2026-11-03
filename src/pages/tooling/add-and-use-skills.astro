@@ -1,0 +1,249 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import CopyableCode from "../../components/CopyableCode.astro";
+import { InsetText } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<ToolingLayout
+  title="Set up and use skills"
+  currentPath="/tooling/add-and-use-skills"
+>
+  <h1 class="govuk-heading-xl">Set up and use skills</h1>
+
+  <p class="govuk-body">
+    Before you start, make sure you have{" "}
+    <a href="/tooling/opencode" class="govuk-link">
+      set up OpenCode with AI Gateway
+    </a>
+    .
+  </p>
+
+  <p class="govuk-body">
+    Skills are reusable prompt instructions that an AI tool can use
+    automatically when needed. They help you write shorter prompts because the
+    AI only loads the skill when it's relevant.
+  </p>
+
+  <p class="govuk-body">
+    For example, instead of typing a long prompt every time you want to
+    summarise meeting notes, you can save the instructions as a skill and just
+    type "summarise these minutes".
+  </p>
+
+  <p class="govuk-body">You can:</p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      <a href="#create-project-skill" class="govuk-link">
+        set up a project-specific skill
+      </a>{" "}
+      (so it's only available for a project)
+    </li>
+    <li>
+      <a href="#create-global-skill" class="govuk-link">
+        set up a global skill
+      </a>{" "}
+      (so it's available for all instances of OpenCode)
+    </li>
+  </ul>
+
+  <InsetText>
+    OpenCode loads skills automatically based on your request. Use clear names
+    and descriptions when you make your skills, so it chooses the right one.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="create-project-skill">
+    Create a project-specific skill
+  </h2>
+
+  <p class="govuk-body">
+    Project-specific skills are only available when you run OpenCode from that
+    project folder.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Open Terminal, type:
+      <CopyableCode code="cd " />
+    </li>
+    <li>
+      Drag your project folder into the Terminal window to add the file path,
+      and press return.
+    </li>
+    <li>
+      To create a folder for your skill, run:
+      <CopyableCode code="mkdir -p .opencode/skills/<skill-name>" />
+      where <code class="app-code app-code--variable">
+        &lt;skill-name&gt;
+      </code>{" "}
+      is the name of the skill (use lowercase and hyphens, not spaces).
+    </li>
+    <li>
+      To create your skill file, run:
+      <CopyableCode code="code .opencode/skills/<skill-name>/SKILL.md" />
+      where <code class="app-code app-code--variable">
+        &lt;skill-name&gt;
+      </code>{" "}
+      is the name of the skill.
+    </li>
+    <li>
+      Copy and paste the template into the file:
+      <CopyableCode
+        code={`---
+name: <skill-name>
+description: <DESCRIPTION>
+---
+
+<INSTRUCTIONS>`}
+      />
+    </li>
+    <li>
+      Edit the template:
+      <ul class="govuk-list govuk-list--bullet">
+        <li>
+          replace{" "}
+          <code class="app-code app-code--variable">&lt;skill-name&gt;</code>{" "}
+          with a short, lowercase, hyphenated name matching the folder name
+        </li>
+        <li>
+          replace{" "}
+          <code class="app-code app-code--variable">&lt;DESCRIPTION&gt;</code>{" "}
+          with 1 or 2 sentences covering what the skill does and when to use it,
+          for example: "Summarises meeting notes into action points. Use when
+          the user pastes notes or a transcript and asks for a summary."
+        </li>
+        <li>
+          replace{" "}
+          <code class="app-code app-code--variable">&lt;INSTRUCTIONS&gt;</code>{" "}
+          with your prompt instructions
+        </li>
+      </ul>
+    </li>
+    <li>Save the file.</li>
+    <li>
+      Check it works:
+      <ul class="govuk-list govuk-list--bullet">
+        <li>open Terminal and navigate to your project folder</li>
+        <li>
+          run <code class="app-code">opencode</code> to start OpenCode
+        </li>
+        <li>ask OpenCode to do something that should trigger your skill</li>
+      </ul>
+    </li>
+  </ol>
+
+  <h3 class="govuk-heading-m">Example skill</h3>
+
+  <p class="govuk-body">
+    This example creates a style review skill saved as{" "}
+    <code class="app-code">style-review/SKILL.md</code>:
+  </p>
+
+  <CopyableCode
+    code={`---
+name: style-review
+description: Checks pasted content against GOV.UK style and returns a table of issues and suggested changes. Use for a formal style check or 2i review.
+---
+
+Output a markdown table with these columns:
+- Original content
+- Proposed change
+- Reason for the change
+
+Only add rows where there's an actual change needed.`}
+  />
+
+  <p class="govuk-body">
+    This example is illustrative, and the description has been shortened. Find
+    examples for:
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      <a href="https://github.com/i-dot-ai/config" class="govuk-link">
+        developer skills and workflows
+      </a>
+    </li>
+    <li>
+      <a
+        href="https://github.com/i-dot-ai/skills-and-projects"
+        class="govuk-link"
+      >
+        non-engineer skills and projects
+      </a>
+    </li>
+  </ul>
+
+  <h2 class="govuk-heading-l" id="create-global-skill">
+    Create a global skill
+  </h2>
+
+  <p class="govuk-body">
+    Global skills are available in every OpenCode session. If you have{" "}
+    <a href="/tooling/opencode#connect-to-vs-code" class="govuk-link">
+      connected OpenCode to VS Code
+    </a>
+    , you can access your global skills there.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To create a folder for your skill, in Terminal, run:
+      <CopyableCode code="mkdir -p ~/.config/opencode/skills/<skill-name>" />
+      where <code class="app-code app-code--variable">
+        &lt;skill-name&gt;
+      </code>{" "}
+      is the name of the skill (use lowercase and hyphens, not spaces).
+    </li>
+    <li>
+      To create your skill file, run:
+      <CopyableCode code="code ~/.config/opencode/skills/<skill-name>/SKILL.md" />
+      where <code class="app-code app-code--variable">&lt;skill-name&gt;</code>{" "}
+      is the name of the skill.
+    </li>
+    <li>
+      Copy and paste the template into the file:
+      <CopyableCode
+        code={`---
+name: <skill-name>
+description: <DESCRIPTION>
+---
+
+<INSTRUCTIONS>`}
+      />
+    </li>
+    <li>
+      Edit the template:
+      <ul class="govuk-list govuk-list--bullet">
+        <li>
+          replace{" "}
+          <code class="app-code app-code--variable">&lt;skill-name&gt;</code>{" "}
+          with a short, lowercase, hyphenated name matching the folder name
+        </li>
+        <li>
+          replace{" "}
+          <code class="app-code app-code--variable">&lt;DESCRIPTION&gt;</code>{" "}
+          with 1 or 2 sentences covering what the skill does and when to use it,
+          for example: "Summarises meeting notes into action points. Use when
+          the user pastes notes or a transcript and asks for a summary."
+        </li>
+        <li>
+          replace{" "}
+          <code class="app-code app-code--variable">&lt;INSTRUCTIONS&gt;</code>{" "}
+          with your prompt instructions
+        </li>
+      </ul>
+    </li>
+    <li>Save the file.</li>
+    <li>
+      Check it works:
+      <ul class="govuk-list govuk-list--bullet">
+        <li>open Terminal</li>
+        <li>
+          run <code class="app-code">opencode</code> to start OpenCode
+        </li>
+        <li>ask OpenCode to do something that should trigger your skill</li>
+      </ul>
+    </li>
+  </ol>
+</ToolingLayout>

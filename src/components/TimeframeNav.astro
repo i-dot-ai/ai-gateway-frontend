@@ -1,0 +1,77 @@
+---
+/**
+ * Timeframe filter as a GOV.UK sub-navigation: a horizontal row of links where
+ * the current period is bold with a thick blue underline. Selecting a period
+ * navigates with no JavaScript, keeping the page's other query params and
+ * jumping back to `anchor`.
+ */
+import { TIMEFRAMES, type Timeframe } from "../lib/costs";
+
+export interface Props {
+  current: Timeframe;
+  /** Id of the section to scroll back to after navigating. */
+  anchor: string;
+}
+
+const { current, anchor } = Astro.props;
+
+function href(value: Timeframe): string {
+  const params = new URLSearchParams(Astro.url.searchParams);
+  params.set("timeframe", value);
+  return `?${params}#${anchor}`;
+}
+---
+
+<nav class="app-subnav govuk-!-margin-bottom-4" aria-label="Usage time period">
+  <ul class="app-subnav__list">
+    {TIMEFRAMES.map((t) => (
+      <li class="app-subnav__item">
+        {t.value === current ? (
+          <span
+            class="app-subnav__link app-subnav__link--current govuk-body-s govuk-!-margin-bottom-0"
+            aria-current="true"
+          >
+            {t.label}
+          </span>
+        ) : (
+          <a
+            class="app-subnav__link govuk-link govuk-link--no-visited-state govuk-body-s govuk-!-margin-bottom-0"
+            href={href(t.value)}
+          >
+            {t.label}
+          </a>
+        )}
+      </li>
+    ))}
+  </ul>
+</nav>
+
+<style>
+  .app-subnav__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 25px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .app-subnav__link {
+    display: inline-block;
+    /* A transparent border on every item reserves the current item's
+  		   underline space, so selecting a period never shifts the row. */
+    padding-bottom: 6px;
+    border-bottom: 4px solid transparent;
+    text-decoration: none;
+  }
+
+  a.app-subnav__link:hover {
+    text-decoration: underline;
+  }
+
+  .app-subnav__link--current {
+    color: var(--govuk-text-colour);
+    font-weight: 700;
+    border-bottom-color: var(--govuk-brand-colour);
+  }
+</style>

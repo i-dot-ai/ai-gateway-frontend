@@ -1,0 +1,86 @@
+---
+/**
+ * Layout for tooling section pages with sidebar navigation
+ */
+import GovukLayout from "./GovukLayout.astro";
+import SidebarNav from "../components/SidebarNav.astro";
+import PrevNextNav from "../components/PrevNextNav.astro";
+
+export interface Props {
+  title: string;
+  currentPath: string;
+}
+
+const { title, currentPath } = Astro.props;
+
+// Define navigation structure with sections (always expanded)
+// Text should match page H1s
+const navSections = [
+  {
+    title: "Getting started",
+    items: [
+      { href: "/tooling", text: "User guide" },
+      { href: "/tooling/get-your-key", text: "Get your AI Gateway key" },
+      {
+        href: "/tooling/policies-and-processes",
+        text: "Policies and processes",
+      },
+    ],
+  },
+  {
+    title: "Connect your tools",
+    items: [
+      { href: "/tooling/opencode", text: "Set up OpenCode" },
+      { href: "/tooling/claude-code", text: "Set up Claude Code" },
+      { href: "/tooling/cursor", text: "Set up Cursor" },
+      { href: "/tooling/pi", text: "Set up Pi" },
+    ],
+  },
+  {
+    title: "Using OpenCode",
+    items: [
+      { href: "/tooling/set-up-agents", text: "Set up a project" },
+      { href: "/tooling/set-up-global-agent", text: "Set up a global agent" },
+      { href: "/tooling/add-and-use-skills", text: "Set up and use skills" },
+    ],
+  },
+];
+
+// Flatten for prev/next navigation
+const allItems = navSections.flatMap((section) => section.items);
+
+// Find current page index and determine prev/next
+const currentIndex = allItems.findIndex((item) => item.href === currentPath);
+const prevPage = currentIndex > 0 ? allItems[currentIndex - 1] : null;
+const nextPage =
+  currentIndex >= 0 && currentIndex < allItems.length - 1
+    ? allItems[currentIndex + 1]
+    : null;
+
+// Mark current page in sections
+const sectionsWithCurrent = navSections.map((section) => ({
+  ...section,
+  items: section.items.map((item) => ({
+    ...item,
+    current: currentPath === item.href,
+  })),
+}));
+---
+
+<GovukLayout title={title}>
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-one-third app-sidebar--sticky">
+      <SidebarNav
+        sections={sectionsWithCurrent}
+        ariaLabel="Tooling section navigation"
+        showSearch={true}
+      />
+    </div>
+
+    <div class="govuk-grid-column-two-thirds">
+      <slot />
+
+      <PrevNextNav prev={prevPage} next={nextPage} />
+    </div>
+  </div>
+</GovukLayout>

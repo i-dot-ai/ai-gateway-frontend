@@ -1,0 +1,342 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import CopyableCode from "../../components/CopyableCode.astro";
+import { InsetText } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<ToolingLayout title="Set up Claude Code" currentPath="/tooling/claude-code">
+  <h1 class="govuk-heading-xl">Set up Claude Code</h1>
+
+  <p class="govuk-body">
+    You can use the AI Gateway with Claude Code in your terminal, or as an
+    extension in VS Code. It can only access Claude models.
+  </p>
+
+  <figure class="govuk-!-margin-bottom-6">
+    <img
+      src="/assets/images/gateway-diagram-claude-code.svg"
+      alt="Diagram showing Claude Code running in the terminal or as an extension in VS Code. It connects to the AI Gateway, which provides access to Claude models."
+      class="govuk-!-width-full"
+    />
+  </figure>
+
+  <p class="govuk-body">
+    Before you start, make sure you have{" "}
+    <a class="govuk-link" href="/tooling/get-your-key">
+      your AI Gateway key
+    </a>
+    . Then, to set Claude Code, you need to:
+  </p>
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      <a class="govuk-link" href="#use-admin-permissions">
+        Use admin permissions
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#connect-to-github">
+        Connect to GitHub (and install Xcode tools)
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#install-claude-code">
+        Install Claude Code
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#install-vs-code">
+        Install VS Code
+      </a>
+    </li>
+    <li>
+      (If needed){" "}
+      <a class="govuk-link" href="#add-your-key">
+        Add or renew your AI Gateway key
+      </a>
+    </li>
+  </ol>
+
+  <InsetText>
+    These steps work for most setups. If you run into issues you can't resolve,
+    contact us in the #ai-model-gateway-team channel on i.AI Slack.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="use-admin-permissions">
+    Use admin permissions
+  </h2>
+
+  <p class="govuk-body">
+    You need (temporary) admin permissions to install software on your Mac.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Select the padlock icon (<strong>Local Admin Management</strong>) on the
+      top menu bar.
+    </li>
+    <li>
+      Choose <strong>Install an app</strong>.
+    </li>
+    <li>
+      Select <strong>Start session</strong>, and enter your laptop password.
+    </li>
+    <li>
+      Select <strong>OK</strong>.
+    </li>
+  </ol>
+
+  <InsetText>
+    These permissions last for 10 minutes. Select the padlock to request more
+    time.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="connect-to-github">
+    Connect to GitHub (and install Xcode tools)
+  </h2>
+
+  <p class="govuk-body">
+    You need to connect to GitHub to quickly install our agents and skills, and
+    to use GitHub with apps such as VS Code.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To check if you have Xcode tools installed, in Terminal, run:
+      <CopyableCode code="xcode-select --version" />
+    </li>
+    <li>
+      If the command is not found, you need to install Xcode tools. To install
+      Xcode tools, in Terminal, run:
+      <CopyableCode code="xcode-select --install" />
+    </li>
+    <li>
+      To connect your name to GitHub, in Terminal, run:
+      <CopyableCode code='git config --global user.name "<Your Name>"' />
+      <p class="govuk-body">
+        where <code class="app-code app-code--variable">&lt;Your Name&gt;</code>{" "}
+        is your name.
+      </p>
+    </li>
+    <li>
+      To connect your GitHub email, in Terminal, run:
+      <CopyableCode code="git config --global user.email <your-email@example.com>" />
+      <p class="govuk-body">
+        where{" "}
+        <code class="app-code app-code--variable">
+          &lt;your-email@example.com&gt;
+        </code>{" "}
+        is the email you use to log into GitHub.
+      </p>
+    </li>
+    <li>
+      To generate an SSH key, in Terminal, run:
+      <CopyableCode code="ssh-keygen -t ed25519" />
+    </li>
+    <li>
+      When it says{" "}
+      <code class="app-code">Enter file in which to save the key</code>, press
+      return.
+    </li>
+    <li>
+      When it says{" "}
+      <code class="app-code">Enter passphrase (empty for no passphrase)</code>,
+      press return twice.
+    </li>
+    <li>
+      To show your SSH key, run:
+      <CopyableCode code="cat ~/.ssh/id_ed25519.pub" />
+    </li>
+    <li>
+      Highlight the full line starting{" "}
+      <code class="app-code">ssh-ed25519...</code> and copy it.
+    </li>
+    <li>
+      To add your SSH key to GitHub, open{" "}
+      <a
+        class="govuk-link"
+        href="https://github.com/settings/keys"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        GitHub SSH Settings
+      </a>
+      .
+    </li>
+    <li>
+      Select <strong>New SSH key</strong>.
+    </li>
+    <li>
+      In <strong>Title</strong>, add: <code class="app-code">Dev laptop</code>.
+    </li>
+    <li>
+      In <strong>Key</strong>, paste your copied SSH key.
+    </li>
+    <li>
+      Choose <strong>Add SSH key</strong>.
+    </li>
+    <li>
+      To test that your SSH key is set up correctly with GitHub, in Terminal,
+      run:
+      <CopyableCode code="ssh -T git@github.com" />
+    </li>
+    <li>
+      To confirm you trust the fingerprint (and want to continue), run:
+      <CopyableCode code="yes" />
+    </li>
+  </ol>
+
+  <p class="govuk-body">
+    If you're set up correctly, Terminal will say:{" "}
+    <code class="app-code">
+      Hi &lt;username&gt;! You've successfully authenticated, but GitHub does
+      not provide shell access.
+    </code>
+  </p>
+
+  <h2 class="govuk-heading-l" id="install-claude-code">
+    Install Claude Code
+  </h2>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To install Claude Code, in Terminal, run:
+      <CopyableCode code="brew install --cask claude-code" />
+    </li>
+    <li>
+      To navigate to your Documents folder, run:
+      <CopyableCode code="cd Documents" />
+    </li>
+    <li>
+      To make a folder for your files, run:
+      <CopyableCode code="mkdir <folder-name>" />
+      <p class="govuk-body">
+        where{" "}
+        <code class="app-code app-code--variable">&lt;folder-name&gt;</code> is
+        the name of your new folder.
+      </p>
+    </li>
+    <li>
+      To open your new folder, run:
+      <CopyableCode code="cd <folder-name>" />
+    </li>
+    <li>
+      To copy the configuration files from GitHub, run:
+      <CopyableCode code="git clone git@github.com:i-dot-ai/coding-agent-litellm-config.git" />
+    </li>
+    <li>
+      To open the configuration folder, run:
+      <CopyableCode code="cd coding-agent-litellm-config" />
+    </li>
+    <li>
+      To configure Claude Code, run:
+      <CopyableCode code="./install.sh" />
+    </li>
+    <li>
+      When it asks for your AI Gateway key, paste your key — or press return to
+      skip and add your key later.
+    </li>
+    <li>
+      To go to your home folder, run:
+      <CopyableCode code="cd" />
+    </li>
+    <li>
+      To make a safe folder to use Claude in, run:
+      <CopyableCode code="mkdir <folder-name>" />
+      <p class="govuk-body">
+        where{" "}
+        <code class="app-code app-code--variable">&lt;folder-name&gt;</code> is
+        the name of your new folder.
+      </p>
+    </li>
+    <li>
+      To open your new folder, run:
+      <CopyableCode code="cd <folder-name>" />
+    </li>
+    <li>
+      To start Claude, run:
+      <CopyableCode code="claude" />
+    </li>
+    <li>
+      Use the arrow keys to choose your preferred code formatting, and press
+      return.
+    </li>
+    <li>
+      Use the arrow keys to choose{" "}
+      <code class="app-code">Yes, I trust this folder</code>, and press return.
+    </li>
+  </ol>
+
+  <p class="govuk-body">
+    The installer also registers a hook so Claude Code checks for config updates
+    on each new session, and preserves any of your own hooks, plugins or env
+    vars already in <code class="app-code">~/.claude/settings.json</code>. See
+    the{" "}
+    <a
+      class="govuk-link"
+      href="https://github.com/i-dot-ai/coding-agent-litellm-config"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      coding-agent-litellm-config README
+    </a>{" "}
+    for full setup details, including rollback and uninstall instructions.
+  </p>
+
+  <h2 class="govuk-heading-l" id="install-vs-code">
+    Install VS Code
+  </h2>
+
+  <p class="govuk-body">
+    VS Code is an integrated development environment which lets you open files
+    from the Terminal window.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To check if you have VS Code installed, in Terminal, run:
+      <CopyableCode code="code" />
+    </li>
+    <li>
+      If the command is not found, you need to install VS Code. To install VS
+      Code, in Terminal, run:
+      <CopyableCode code="brew install --cask visual-studio-code" />
+    </li>
+  </ol>
+
+  <h2 class="govuk-heading-l" id="add-your-key">
+    Add or renew your AI Gateway key
+  </h2>
+
+  <p class="govuk-body">
+    If you skipped adding your key during install, or need to replace an expired
+    one, edit <code class="app-code">~/.claude/settings.json</code> directly:
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Copy your AI Gateway key (
+      <a class="govuk-link" href="/tooling/get-your-key">
+        how to get your key
+      </a>
+      ).
+    </li>
+    <li>
+      In Terminal, run:
+      <CopyableCode code="code ~/.claude/settings.json" />
+    </li>
+    <li>
+      Inside the <code class="app-code">"env"</code> block, after{" "}
+      <code class="app-code">"CLAUDE_CODE_SKIP_BEDROCK_AUTH": "1"</code>, add
+      (or replace):
+      <CopyableCode code={`"ANTHROPIC_AUTH_TOKEN": "<your-ai-gateway-key>",`} />
+      <p class="govuk-body">
+        where{" "}
+        <code class="app-code app-code--variable">
+          &lt;your-ai-gateway-key&gt;
+        </code>{" "}
+        is your API key.
+      </p>
+    </li>
+    <li>Save the file.</li>
+  </ol>
+</ToolingLayout>

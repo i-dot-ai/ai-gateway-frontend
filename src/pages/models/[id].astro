@@ -1,0 +1,372 @@
+---
+import GovukLayout from "../../layouts/GovukLayout.astro";
+import StatusTimeline from "../../components/StatusTimeline.astro";
+import StatusLegend from "../../components/StatusLegend.astro";
+import TimeframeNav from "../../components/TimeframeNav.astro";
+import UsageTabs from "../../components/UsageTabs.astro";
+import {
+  Tag,
+  BackLink,
+  InsetText,
+  ErrorMessage,
+  SummaryList,
+  SummaryListRow,
+  SummaryListKey,
+  SummaryListValue,
+} from "@i-dot-ai-npm/component-library-astro";
+import {
+  getModel,
+  getModelHealthHistory,
+  getModelCosts,
+  type LitellmCost,
+} from "../../lib/litellm";
+import { formatRequests, formatTokens, trimCompact } from "../../lib/usage";
+import {
+  DEFAULT_TIMEFRAME,
+  getDateRange,
+  parseTimeframe,
+} from "../../lib/costs";
+import {
+  REFERENCE_OUTPUT_TOKENS,
+  estimateImpact,
+  formatCo2,
+  formatEnergy,
+  formatRange,
+  formatParameters,
+  formatWater,
+  impactSourceLabel,
+  resolveImpactModel,
+  unresolvedLabel,
+  zoneLabel,
+} from "../../lib/impact";
+import {
+  bucketKeys,
+  windowStartIso,
+  windowDef,
+  summariseModelHealth,
+  formatUptime,
+  statusLabel,
+  STATUS_TAG,
+  type ModelHealth,
+} from "../../lib/health";
+const { id } = Astro.params;
+
+const { model, error } = id
+  ? await getModel(id)
+  : { model: undefined, error: "No model id provided" };
+
+// A wider 90-day daily availability history for this one model (the list page
+// shows only the last 24 hours). Scoped to this model via the history fetch's
+// `model` filter so it stays cheap, and soft-fails to grey "no data" segments
+// rather than blanking the page.
+const HEALTH_WINDOW = "90d" as const;
+const healthDef = windowDef(HEALTH_WINDOW);
+const healthKeys = bucketKeys(HEALTH_WINDOW);
+let health: ModelHealth | undefined;
+let healthError: string | undefined;
+if (model) {
+  // The model-scoped history is paged newest-first, so it already contains the
+  // current check - no need for the all-models /health/latest snapshot here.
+  const history = await getModelHealthHistory(
+    windowStartIso(HEALTH_WINDOW),
+    model.name,
+  );
+  health = summariseModelHealth(
+    history.checks,
+    [model.name],
+    healthKeys,
+    healthDef.granularity,
+  ).models[0];
+  healthError = history.error;
+}
+
+// Everyone's usage of this model across the gateway, fetched from the model_groups
+// breakdown which is keyed by deployment alias (model.name). This matches the actual
+// model group that callers target, giving accurate attribution.
+const timeframe = parseTimeframe(
+  Astro.url.searchParams.get("timeframe"),
+  DEFAULT_TIMEFRAME,
+);
+let usage: { costs: LitellmCost[]; error?: string } | undefined;
+if (model) {
+  const { startDate, endDate } = getDateRange(timeframe);
+  const result = await getModelCosts(model.name, startDate, endDate);
+  usage = { costs: result.costs, error: result.error };
+}
+
+// Estimated impact of a typical request, so models can be compared. Resolved
+// from this model's config alone, no usage needed (ADR-0005). One line per
+// metric, so the three ranges don't run together.
+const impact = model && resolveImpactModel(model);
+const reference = impact?.ok
+  ? estimateImpact(impact.model, REFERENCE_OUTPUT_TOKENS, 1)
+  : undefined;
+---
+
+<GovukLayout title="Model">
+  <div class="govuk-width-container">
+    <BackLink href="/models">Back</BackLink>
+    <main class="govuk-main-wrapper">
+      <div class="govuk-grid-row">
+        <div class="govuk-grid-column-two-thirds">
+          {error || !model ? (
+            <ErrorMessage class="govuk-body" visuallyHiddenText="">
+              {error ?? "Model not found"}
+            </ErrorMessage>
+          ) : (
+            <Fragment>
+              <h1 class="govuk-heading-xl">{model.name}</h1>
+              <p class="govuk-body">{model.description}</p>
+
+              <h2 class="govuk-heading-m">Status</h2>
+              {healthError && (
+                <InsetText>
+                  Health data is currently unavailable ({healthError}).
+                  Availability shows no data until it returns.
+                </InsetText>
+              )}
+              {health && (
+                <div class="app-status-detail">
+                  <p class="govuk-body-s app-status-detail__caption">
+                    Status over the last {healthDef.label}
+                  </p>
+                  <StatusTimeline
+                    segments={health.segments}
+                    uptimePct={health.uptimePct}
+                    granularity={healthDef.granularity}
+                    incidents={health.incidents}
+                    label={model.name}
+                  />
+                  <div class="app-status-detail__meta">
+                    <Tag colour={STATUS_TAG[health.currentStatus]}>
+                      {statusLabel(health.currentStatus)}
+                    </Tag>
+                    <span class="govuk-body-s app-status-detail__uptime">
+                      {formatUptime(health.uptimePct)} uptime
+                    </span>
+                  </div>
+                  <div class="app-status-detail__legend">
+                    <StatusLegend />
+                  </div>
+                </div>
+              )}
+
+              {usage && (
+                <div class="govuk-!-margin-bottom-8">
+                  <h2 id="usage" class="govuk-heading-m">
+                    Usage across the gateway
+                  </h2>
+                  <TimeframeNav current={timeframe} anchor="usage" />
+                  {usage.error ? (
+                    <p class="govuk-body">Usage is unavailable right now.</p>
+                  ) : (
+                    <UsageTabs
+                      costs={usage.costs}
+                      timeframe={timeframe}
+                      breakdown="team"
+                    />
+                  )}
+                </div>
+              )}
+
+              <h2 class="govuk-heading-m">Details</h2>
+              <SummaryList>
+                <SummaryListRow>
+                  <SummaryListKey>provider</SummaryListKey>
+                  <SummaryListValue>{model.provider}</SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>mode</SummaryListKey>
+                  <SummaryListValue>{model.mode}</SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>location</SummaryListKey>
+                  <SummaryListValue>{model.location}</SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>lab</SummaryListKey>
+                  <SummaryListValue>{model.lab}</SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>country of origin</SummaryListKey>
+                  <SummaryListValue>{model.country_of_origin}</SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>open weight</SummaryListKey>
+                  <SummaryListValue>
+                    {model.open_weight ? "yes" : "no"}
+                  </SummaryListValue>
+                </SummaryListRow>
+                {model.parameters && (
+                  <SummaryListRow>
+                    <SummaryListKey>parameters</SummaryListKey>
+                    <SummaryListValue>
+                      {formatParameters(model.parameters)}
+                    </SummaryListValue>
+                  </SummaryListRow>
+                )}
+                <SummaryListRow>
+                  <SummaryListKey>
+                    impact per {REFERENCE_OUTPUT_TOKENS.toLocaleString("en-GB")}{" "}
+                    output tokens
+                  </SummaryListKey>
+                  <SummaryListValue>
+                    {impact?.ok && reference ? (
+                      <Fragment>
+                        <ul class="govuk-list govuk-!-margin-bottom-1">
+                          <li>
+                            Carbon: {formatRange(reference.gwpKg, formatCo2)}
+                          </li>
+                          <li>
+                            Electricity:{" "}
+                            {formatRange(reference.energyKwh, formatEnergy)}
+                          </li>
+                          {/* No water line at all when ecologits has no figure, rather than a false "0 mL". */}
+                          {reference.waterL && (
+                            <li>
+                              Water:{" "}
+                              {formatRange(reference.waterL, formatWater)}
+                            </li>
+                          )}
+                        </ul>
+                        <span class="govuk-body-s app-impact-note">
+                          Modelled by ecologits{" "}
+                          {impactSourceLabel(impact.model)} on the{" "}
+                          {zoneLabel(impact.model.zone)}, not measured.
+                          {impact.model.parameters?.source && (
+                            <Fragment>
+                              {" "}
+                              <a
+                                class="govuk-link"
+                                href={impact.model.parameters.source}
+                                rel="noopener"
+                              >
+                                Size source
+                              </a>
+                            </Fragment>
+                          )}
+                        </span>
+                      </Fragment>
+                    ) : impact && !impact.ok ? (
+                      unresolvedLabel(impact.reason)
+                    ) : null}
+                  </SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>uri</SummaryListKey>
+                  <SummaryListValue>
+                    <a href={model.uri} class="govuk-link">
+                      {model.uri}
+                    </a>
+                  </SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>supports vision</SummaryListKey>
+                  <SummaryListValue>
+                    {model.supports_vision ? "yes" : "no"}
+                  </SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>supports function calling</SummaryListKey>
+                  <SummaryListValue>
+                    {model.supports_function_calling ? "yes" : "no"}
+                  </SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>supports audio input</SummaryListKey>
+                  <SummaryListValue>
+                    {model.supports_audio_input ? "yes" : "no"}
+                  </SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>supports reasoning</SummaryListKey>
+                  <SummaryListValue>
+                    {model.supports_reasoning ? "yes" : "no"}
+                  </SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>max input tokens</SummaryListKey>
+                  <SummaryListValue>
+                    {model.max_input_tokens ?? "unknown"}
+                  </SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>max output tokens</SummaryListKey>
+                  <SummaryListValue>
+                    {model.max_output_tokens ?? "unknown"}
+                  </SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>tokens per minute limit</SummaryListKey>
+                  <SummaryListValue>
+                    {model.tpm !== undefined
+                      ? `${trimCompact(formatTokens(model.tpm))} tokens/min`
+                      : "no limit"}
+                  </SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>requests per minute limit</SummaryListKey>
+                  <SummaryListValue>
+                    {model.rpm !== undefined
+                      ? `${trimCompact(formatRequests(model.rpm))} requests/min`
+                      : "no limit"}
+                  </SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>cost per million input token</SummaryListKey>
+                  <SummaryListValue>
+                    {model.input_cost_per_token !== undefined
+                      ? (model.input_cost_per_token * 1e6).toFixed(2)
+                      : "unknown"}
+                  </SummaryListValue>
+                </SummaryListRow>
+                <SummaryListRow>
+                  <SummaryListKey>cost per million output token</SummaryListKey>
+                  <SummaryListValue>
+                    {model.output_cost_per_token !== undefined
+                      ? (model.output_cost_per_token * 1e6).toFixed(2)
+                      : "unknown"}
+                  </SummaryListValue>
+                </SummaryListRow>
+              </SummaryList>
+            </Fragment>
+          )}
+        </div>
+      </div>
+    </main>
+  </div>
+</GovukLayout>
+
+<style>
+  .app-status-detail {
+    margin-bottom: 30px;
+  }
+
+  /* The estimate's provenance, under the figures in the summary list. */
+  .app-impact-note {
+    display: block;
+    margin-top: 5px;
+    color: var(--govuk-secondary-text-colour);
+  }
+
+  .app-status-detail__caption {
+    margin-bottom: 5px;
+    color: var(--govuk-secondary-text-colour);
+  }
+
+  .app-status-detail__meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .app-status-detail__uptime {
+    margin: 0;
+    color: var(--govuk-secondary-text-colour);
+  }
+
+  .app-status-detail__legend {
+    margin-top: 12px;
+  }
+</style>

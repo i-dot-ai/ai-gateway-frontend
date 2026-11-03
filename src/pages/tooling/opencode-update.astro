@@ -1,0 +1,146 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import CopyableCode from "../../components/CopyableCode.astro";
+import { InsetText } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<ToolingLayout
+  title="Update OpenCode to version 2"
+  currentPath="/tooling/opencode-update"
+>
+  <h1 class="govuk-heading-xl">Update OpenCode to version 2</h1>
+
+  <p class="govuk-body">
+    We are using OpenCode version 2. If you installed OpenCode version 1 you
+    need to update your software and configuration file. To do this:
+  </p>
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      <a class="govuk-link" href="#check-your-version">
+        Check if you need to update
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#prepare-your-config">
+        Prepare your config file
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#install-opencode-v2">
+        Install OpenCode v2
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#configure-opencode">
+        Configure OpenCode with your old settings
+      </a>
+    </li>
+  </ol>
+
+  <InsetText>
+    These steps work for most setups. If you run into issues you can't resolve,
+    contact us in the #ai-model-gateway-team channel on i.AI Slack.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="check-your-version">
+    Check if you need to update
+  </h2>
+
+  <p class="govuk-body">
+    To check your current OpenCode version, in Terminal, run:
+  </p>
+  <CopyableCode code="opencode --version" />
+
+  <p class="govuk-body">
+    If the version number starts with 1, you need to update to version 2.
+  </p>
+
+  <h2 class="govuk-heading-l" id="prepare-your-config">
+    Prepare your config file
+  </h2>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To back up your existing config files, in Terminal, run:
+      <CopyableCode code="cp -r ~/.config/opencode ~/.config/opencode-v1-backup" />
+    </li>
+    <li>
+      <a class="govuk-link" href="/opencode.json" download>
+        Download the OpenCode configuration file
+      </a>{" "}
+      and move it to your Desktop.
+    </li>
+  </ol>
+
+  <h3 class="govuk-heading-m">
+    Copy your custom settings to the new config file
+  </h3>
+
+  <p class="govuk-body">
+    If you have custom settings (for example, MCP servers), you'll need to copy
+    them to the new config file.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To open your old config file, run:
+      <CopyableCode code="code ~/.config/opencode-v1-backup/opencode.json" />
+    </li>
+    <li>
+      Find the <code class="app-code">"mcp"</code> section in your old config
+      and copy your server definitions, for example:
+      <CopyableCode
+        code={`"context7": { ... },
+"slack": { ... }`}
+      />
+    </li>
+    <li>
+      To open your new config file on your Desktop, run:
+      <CopyableCode code="code ~/Desktop/opencode.json" />
+    </li>
+    <li>
+      Find the <code class="app-code">"mcp"</code> section and paste your server
+      definitions inside the <code class="app-code">"servers"</code> object:
+      <CopyableCode
+        code={`"mcp": {
+  "servers": {
+    // paste your servers here
+  }
+}`}
+      />
+    </li>
+  </ol>
+
+  <h2 class="govuk-heading-l" id="install-opencode-v2">
+    Install OpenCode v2
+  </h2>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To install the update, in Terminal, run:
+      <CopyableCode code="brew unlink opencode && brew install anomalyco/tap/opencode-v2" />
+    </li>
+    <li>
+      To check the installation was successful, run:
+      <CopyableCode code="opencode --version" />
+    </li>
+  </ol>
+
+  <p class="govuk-body">
+    If the version number starts with 2, you have successfully installed version
+    2. If the version still starts with 1, run the installation command again.
+  </p>
+
+  <h2 class="govuk-heading-l" id="configure-opencode">
+    Configure OpenCode with your old settings
+  </h2>
+
+  <p class="govuk-body">To move your updated config file into place, run:</p>
+  <CopyableCode code="cp ~/Desktop/opencode.json ~/.config/opencode/opencode.json" />
+
+  <p class="govuk-body">
+    You'll need to re-authenticate OAuth servers (such as Slack, Atlassian or
+    PostHog) on first use. OpenCode v2 will prompt you when authentication is
+    needed.
+  </p>
+</ToolingLayout>

@@ -1,0 +1,64 @@
+---
+import GovukLayout from "../../../layouts/GovukLayout.astro";
+import {
+  BackLink,
+  WarningText,
+  Button,
+} from "@i-dot-ai-npm/component-library-astro";
+import {
+  deleteKey,
+  getUserId,
+  getUserKeys,
+  keyName,
+} from "../../../lib/litellmKeys";
+
+const token = Astro.params.id ? decodeURIComponent(Astro.params.id) : "";
+const userEmail = (await Astro.session?.get("user-email")) ?? null;
+
+let keyToDelete:
+  Awaited<ReturnType<typeof getUserKeys>>["keys"][number] | undefined;
+
+if (userEmail && token) {
+  const { userId } = await getUserId(userEmail);
+  if (userId) {
+    const { keys } = await getUserKeys(userId);
+    keyToDelete = keys.find((k) => k.token === token);
+  }
+}
+
+// No such key, or it doesn't belong to this user - nothing to confirm/delete.
+// This ownership check gates both rendering the confirm screen below and the
+// POST branch, so this page can't be used to learn whether, or delete,
+// another user's token.
+if (!keyToDelete) {
+  return Astro.redirect("/", 303);
+}
+
+if (Astro.request.method === "POST") {
+  await deleteKey(keyToDelete.token);
+  return Astro.redirect("/", 303);
+}
+---
+
+<GovukLayout title="Are you sure you want to delete this key?">
+  <BackLink href="/">Back</BackLink>
+
+  <h1 class="govuk-heading-l">Are you sure you want to delete this key?</h1>
+
+  <p class="govuk-body">
+    You are about to delete the key "{keyName(keyToDelete.alias)}".
+  </p>
+
+  <WarningText>
+    Anything using this key will stop working immediately.
+  </WarningText>
+
+  <form method="post" class="govuk-button-group">
+    <Button warning type="submit">
+      Delete key
+    </Button>
+    <Button secondary href="/">
+      Cancel
+    </Button>
+  </form>
+</GovukLayout>

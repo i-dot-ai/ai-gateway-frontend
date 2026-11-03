@@ -1,0 +1,65 @@
+---
+import GovukLayout from "../../../layouts/GovukLayout.astro";
+import CopyableCode from "../../../components/CopyableCode.astro";
+import { WarningText } from "@i-dot-ai-npm/component-library-astro";
+
+async function readAndClearFlash(key: string): Promise<string | undefined> {
+  const value = await Astro.session?.get(key);
+  if (value) {
+    Astro.session?.delete(key);
+  }
+  return value || undefined;
+}
+
+const generatedKey = await readAndClearFlash("flash-generated-key");
+const isReplacement =
+  (await readAndClearFlash("flash-generated-key-replaced")) === "true";
+const generatedKeyAlias = await readAndClearFlash("flash-generated-key-alias");
+const generatedKeyTeam = await readAndClearFlash("flash-generated-key-team");
+
+// The flash is read-and-cleared, so this is what actually enforces
+// "shown once": a direct visit, refresh, or back-button lands here empty.
+if (!generatedKey) {
+  return Astro.redirect("/", 303);
+}
+
+const pageTitle = "Your Gateway key has been created";
+---
+
+<GovukLayout title={pageTitle}>
+  <h1 class="govuk-heading-xl">{pageTitle}</h1>
+
+  <h2 class="govuk-heading-m">Copy your key</h2>
+
+  <CopyableCode code={generatedKey} />
+
+  <WarningText class="govuk-!-margin-top-6">
+    You will not be able to see this key again. If you lose it, you will need to
+    create a new one. Do not share it with anybody else.
+  </WarningText>
+
+  {isReplacement && (
+    <WarningText>
+      This key replaces your previous one, which has been deleted. You must
+      update this key in any tools that were using it.
+    </WarningText>
+  )}
+
+  <h2 class="govuk-heading-m">What happens next</h2>
+
+  <p class="govuk-body">
+    Paste the key into the tool you are setting up.{" "}
+    <a href="/tooling" class="govuk-link">
+      Learn how to use the Gateway
+    </a>
+    .
+  </p>
+
+  <p class="govuk-body">
+    Your key will be revoked in 60 days.{" "}
+    <a href="/" class="govuk-link">
+      Manage your keys
+    </a>
+    .
+  </p>
+</GovukLayout>

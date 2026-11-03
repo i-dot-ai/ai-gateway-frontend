@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 330" role="img" aria-labelledby="title-claudecode desc-claudecode">
+  <title id="title-claudecode">How Claude Code connects to the AI Gateway</title>
+  <desc id="desc-claudecode">Diagram showing Claude Code running in the terminal or as an extension in VS Code. It connects to the AI Gateway, which provides access to Claude models.</desc>
+  
+  <!-- Command line label - now bold -->
+  <text x="110" y="35" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Command line</text>
+  
+  <!-- Claude Code terminal -->
+  <rect x="20" y="60" width="180" height="50" rx="4" fill="#1d70b8" stroke="#003078" stroke-width="2"/>
+  <text x="110" y="92" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Claude Code</text>
+  
+  <!-- Desktop environment container -->
+  <rect x="20" y="135" width="180" height="175" rx="4" fill="#f3f2f1" stroke="#b1b4b6" stroke-width="2"/>
+  <text x="110" y="160" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Desktop</text>
+  <text x="110" y="177" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14" font-weight="bold">environment</text>
+  
+  <!-- VS Code inside desktop container -->
+  <rect x="35" y="195" width="150" height="95" rx="2" fill="#1d70b8" stroke="#003078" stroke-width="1"/>
+  <text x="110" y="225" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">VS Code</text>
+  <text x="110" y="250" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14">(using Claude Code</text>
+  <text x="110" y="275" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14">extension)</text>
+  
+  <!-- Arrows to gateway - symmetric angles -->
+  <!-- Command line box center at y=85, Desktop env center at y=222, midpoint = 153.5 -->
+  <line x1="200" y1="85" x2="290" y2="154" stroke="#0b0c0c" stroke-width="2"/>
+  <line x1="200" y1="222" x2="290" y2="154" stroke="#0b0c0c" stroke-width="2"/>
+  <polygon points="290,149 305,154 290,159" fill="#0b0c0c"/>
+  
+  <!-- Gateway - centered at y=154 -->
+  <rect x="305" y="104" width="180" height="100" rx="4" fill="#00703c" stroke="#004e2a" stroke-width="2"/>
+  <text x="395" y="151" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">AI Gateway</text>
+  <text x="395" y="168" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14">(using your key)</text>
+  
+  <!-- Arrow to models -->
+  <line x1="485" y1="154" x2="515" y2="154" stroke="#0b0c0c" stroke-width="2"/>
+  <polygon points="515,149 530,154 515,159" fill="#0b0c0c"/>
+  
+  <!-- Models container - centered on arrow -->
+  <rect x="530" y="102" width="150" height="105" rx="4" fill="#f3f2f1" stroke="#b1b4b6" stroke-width="2"/>
+  <text x="605" y="127" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Models</text>
+  
+  <!-- Claude only -->
+  <rect x="545" y="142" width="120" height="50" rx="2" fill="#fff7e6" stroke="#ffdd00" stroke-width="1"/>
+  <text x="605" y="174" text-anchor="middle" fill="#0b0c0c" font-family="Arial, sans-serif" font-size="14">Claude</text>
+</svg>

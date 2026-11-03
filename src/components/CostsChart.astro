@@ -1,0 +1,112 @@
+---
+import type { ChartData } from "../lib/costs";
+
+export interface Props {
+  chartData: ChartData;
+  metric: string;
+}
+
+const { chartData, metric } = Astro.props;
+---
+
+<canvas
+  id="costs-chart"
+  data-chart={JSON.stringify(chartData)}
+  data-metric={metric}
+  height="120"
+></canvas>
+
+<script>
+  import {
+    Chart,
+    BarController,
+    BarElement,
+    CategoryScale,
+    LinearScale,
+    Tooltip,
+    Legend,
+    Colors,
+  } from "chart.js";
+  import { formatChartDate } from "../lib/usage";
+
+  // Colors isn't pulled in by cherry-picking individual controllers/elements
+  // (only chart.js/auto registers it implicitly) - without it every dataset
+  // falls back to the same default grey, making a stacked chart unreadable.
+  Chart.register(
+    BarController,
+    BarElement,
+    CategoryScale,
+    LinearScale,
+    Tooltip,
+    Legend,
+    Colors,
+  );
+
+  const canvas = document.getElementById(
+    "costs-chart",
+  ) as HTMLCanvasElement | null;
+  if (canvas) {
+    const chartData = JSON.parse(canvas.dataset.chart ?? "{}");
+    const metric = canvas.dataset.metric;
+
+    // Format the date labels
+    const formattedLabels = chartData.labels.map((label: string) =>
+      formatChartDate(label),
+    );
+
+    new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: formattedLabels,
+        datasets: chartData.datasets.map(
+          (d: { label: string; data: number[] }) => ({
+            label: d.label,
+            data: d.data,
+          }),
+        ),
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            position: "right",
+            labels: {
+              font: {
+                family: '"Inter", Helvetica, Arial, sans-serif',
+                size: 19,
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            stacked: true,
+            ticks: {
+              font: {
+                family: '"Inter", Helvetica, Arial, sans-serif',
+                size: 19,
+              },
+            },
+          },
+          y: {
+            stacked: true,
+            title: {
+              display: true,
+              text: metric === "spend" ? "Spend ($)" : "Tokens (millions)",
+              font: {
+                family: '"Inter", Helvetica, Arial, sans-serif',
+                size: 19,
+              },
+            },
+            ticks: {
+              font: {
+                family: '"Inter", Helvetica, Arial, sans-serif',
+                size: 19,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+</script>

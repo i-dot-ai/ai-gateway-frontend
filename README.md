@@ -1,6 +1,3 @@
-> [!WARNING]  
-> This is just a stub repository, the working code will be migrated over shortly.
-
 # AI Gateway Frontend
 
 The web console for the i.AI Gateway — a self-service front end over a [LiteLLM](https://github.com/BerriAI/litellm) proxy. Users sign in, browse the available models, generate and manage their own API keys, and view their usage, cost and environmental-impact trends.
@@ -14,7 +11,7 @@ It is a server-rendered [Astro](https://astro.build) app: the sign-in email and 
 
 ## Getting started
 
-This repo currently holds only the build/deploy plumbing. The application code lives in [i-dot-ai/core-llm-gateway](https://github.com/i-dot-ai/core-llm-gateway) and will be migrated here; `src/` is a placeholder so the build still works.
+This repo holds the frontend application and its build/deploy plumbing. It was migrated out of [i-dot-ai/core-llm-gateway](https://github.com/i-dot-ai/core-llm-gateway), which still owns the gateway backend.
 
 ```sh
 cp .env.example .env

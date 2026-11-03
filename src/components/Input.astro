@@ -1,0 +1,32 @@
+---
+// The library's Input emits a hardcoded type="text" before the spread props, so
+// a passed type renders as a duplicate attribute the browser ignores (date, email
+// and search inputs all fall back to text). Same markup, with type honoured.
+import type { HTMLAttributes } from "astro/types";
+
+interface Props extends HTMLAttributes<"input"> {
+  error?: boolean;
+  subtle?: boolean;
+  width?: "2" | "3" | "4" | "5" | "10" | "20" | "30";
+}
+
+const {
+  error = false,
+  subtle = false,
+  width,
+  type = "text",
+  class: className,
+  ...rest
+} = Astro.props;
+---
+
+<input
+  class:list={[
+    "govuk-input",
+    { "govuk-input--error": error, "govuk-input--subtle": subtle },
+    width && `govuk-input--width-${width}`,
+    className,
+  ]}
+  type={type}
+  {...rest}
+/>

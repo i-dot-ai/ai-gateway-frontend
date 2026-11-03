@@ -1,0 +1,47 @@
+---
+/**
+ * Previous/Next navigation component (GOV.UK pagination block style)
+ *
+ * Thin wrapper over the kit Pagination (block) components so callers keep the
+ * simple { href, text } prop shape while the markup/SVGs come from the kit.
+ *
+ * Usage:
+ * <PrevNextNav
+ *   prev={{ href: "/page-1", text: "Page 1 title" }}
+ *   next={{ href: "/page-3", text: "Page 3 title" }}
+ * />
+ */
+import {
+  Pagination,
+  PaginationPrev,
+  PaginationNext,
+} from "@i-dot-ai-npm/component-library-astro";
+
+export interface NavLink {
+  href: string;
+  text: string;
+}
+
+export interface Props {
+  prev?: NavLink | null;
+  next?: NavLink | null;
+}
+
+const { prev, next } = Astro.props;
+
+// Don't render anything if there's no prev or next
+if (!prev && !next) {
+  return null;
+}
+
+// The kit Pagination{Prev,Next} type their props as a <div> and spread the
+// rest onto the inner <a>, so `href` reaches the anchor at runtime but isn't in
+// the prop type. Pass it via a typed attrs object to keep type-checking happy.
+const prevAttrs = prev ? ({ href: prev.href } as Record<string, string>) : {};
+const nextAttrs = next ? ({ href: next.href } as Record<string, string>) : {};
+---
+
+<Pagination block>
+  {prev && <PaginationPrev block labelText={prev.text} {...prevAttrs} />}
+  {next && <PaginationNext block labelText={next.text} {...nextAttrs} />}
+</Pagination>

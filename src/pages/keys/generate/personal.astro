@@ -1,0 +1,113 @@
+---
+import GovukLayout from "../../../layouts/GovukLayout.astro";
+import {
+  BackLink,
+  InsetText,
+  FormGroup,
+  Label,
+  Hint,
+  ErrorMessage,
+  Input,
+  Button,
+} from "@i-dot-ai-npm/component-library-astro";
+import { KEY_ALIAS_PATTERN } from "../../../lib/litellmKeys";
+
+async function readAndClearFlash(key: string): Promise<string | undefined> {
+  const value = await Astro.session?.get(key);
+  if (value) {
+    Astro.session?.delete(key);
+  }
+  return value || undefined;
+}
+
+if (Astro.request.method === "POST") {
+  const email = await Astro.session?.get("user-email");
+  if (!email) {
+    return Astro.redirect("/", 303);
+  }
+
+  const formData = await Astro.request.formData();
+  const keyName = String(formData.get("keyName") ?? "").trim();
+
+  if (!KEY_ALIAS_PATTERN.test(keyName)) {
+    Astro.session?.set(
+      "flash-key-name-error",
+      "Key name must start with a letter. Any numbers or extra words need a hyphen or underscore before them, for example batch-eval or test-1.",
+    );
+    return Astro.redirect("/keys/generate/personal", 303);
+  }
+
+  Astro.session?.set("pending-key-name", keyName);
+  Astro.session?.set("pending-key-team-id", "");
+  Astro.session?.set("pending-key-team-name", "");
+
+  return Astro.redirect("/keys/generate/confirm", 303);
+}
+
+const keyNameError = await readAndClearFlash("flash-key-name-error");
+---
+
+<GovukLayout title="Create a personal key">
+  <BackLink href="/">Back</BackLink>
+
+  <h1 class="govuk-heading-xl">Create a personal key</h1>
+
+  <p class="govuk-body">
+    A personal Gateway key is for your own use, for example:
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>performance management</li>
+    <li>personal development</li>
+  </ul>
+
+  <p class="govuk-body">
+    Find{" "}
+    <a href="/keys/generate/team" class="govuk-link">
+      how to get a key for work-related tasks
+    </a>
+    .
+  </p>
+
+  <InsetText>
+    You can have as many keys as you need. If you use the same name as an
+    existing key, the new key will replace it.
+  </InsetText>
+
+  <p class="govuk-body">Your key name must:</p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>start with a letter</li>
+    <li>only use letters, numbers, hyphens and underscores</li>
+    <li>be 50 characters or less</li>
+  </ul>
+
+  <form method="post">
+    <FormGroup class:list={[{ "govuk-form-group--error": keyNameError }]}>
+      <Label size="small" for="key-name">
+        Name your key
+      </Label>
+      <Hint id="key-name-hint">
+        Use a name that tells you what the key is for (for example,
+        performance-management)
+      </Hint>
+      {keyNameError && (
+        <ErrorMessage id="key-name-error">{keyNameError}</ErrorMessage>
+      )}
+      <Input
+        error={!!keyNameError}
+        id="key-name"
+        name="keyName"
+        type="text"
+        pattern="^[a-zA-Z]+(?:[-_]+[a-zA-Z0-9]+)*$"
+        aria-describedby={
+          keyNameError ? "key-name-hint key-name-error" : "key-name-hint"
+        }
+        required
+      />
+    </FormGroup>
+    <Button class="govuk-!-margin-top-4" type="submit">
+      Continue
+    </Button>
+  </form>
+</GovukLayout>

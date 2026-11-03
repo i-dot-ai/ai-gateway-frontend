@@ -1,0 +1,177 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import CopyableCode from "../../components/CopyableCode.astro";
+import { InsetText } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<ToolingLayout
+  title="Set up Claude Desktop"
+  currentPath="/tooling/claude-desktop"
+>
+  <h1 class="govuk-heading-xl">Set up Claude Desktop</h1>
+  <p class="govuk-body">
+    You can use the AI Gateway with Claude Desktop, allowing you to interact
+    with Claude & third party models within your desktop environment.
+  </p>
+
+  <p class="govuk-body">
+    Before you start, make sure you have{" "}
+    <a class="govuk-link" href="/tooling/get-your-key">
+      your AI Gateway key
+    </a>
+    . Then, to set up Claude Desktop, you need to:
+  </p>
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      <a class="govuk-link" href="#use-admin-permissions">
+        Use admin permissions
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#install-claude-desktop">
+        Install Claude Desktop
+      </a>
+    </li>
+    <li>
+      (If needed){" "}
+      <a class="govuk-link" href="#add-your-key">
+        Add or renew your AI Gateway key
+      </a>
+    </li>
+  </ol>
+
+  <InsetText>
+    These steps work for most setups. If you run into issues you can't resolve,
+    contact us in the #ai-model-gateway-team channel on i.AI Slack.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="use-admin-permissions">
+    Use admin permissions
+  </h2>
+
+  <p class="govuk-body">
+    You need (temporary) admin permissions to install software on your Mac.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Select the padlock icon (<strong>Local Admin Management</strong>) on the
+      top menu bar.
+    </li>
+    <li>
+      Choose <strong>Install an app</strong>.
+    </li>
+    <li>
+      Select <strong>Start session</strong>, and enter your laptop password.
+    </li>
+    <li>
+      Select <strong>OK</strong>.
+    </li>
+  </ol>
+
+  <InsetText>
+    These permissions last for 10 minutes. Select the padlock to request more
+    time.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="install-claude-desktop">
+    Install Claude Desktop
+  </h2>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To install Claude Desktop on your Mac, download the latest version from
+      the{" "}
+      <a
+        class="govuk-link"
+        target="_blank"
+        rel="noopener noreferrer"
+        href="https://claude.com/download"
+      >
+        Claude website
+      </a>
+    </li>
+    <li>
+      Once downloaded, open the .dmg file and drag the Claude Desktop app to
+      your Applications folder.
+    </li>
+    <li>
+      The first time you open Claude Desktop, you may be prompted to sign in on
+      a pre-existing account. Instead, from the top menu bar, select{" "}
+      <strong>Help</strong> -> <strong>Troubleshooting</strong> ->{" "}
+      <strong>Enable Developer Mode</strong>
+    </li>
+    <li>
+      A new option on the top bar will appear called <strong>Developer</strong>.
+      Select it, then select <strong>Configure third-party inference</strong>
+    </li>
+    <li>
+      In the window that appears, select <strong>Connection</strong>, then
+      select <strong>Gateway</strong> in the dropdown. You'll be provided a
+      series of fields to fill in. Enter the following, keeping other options
+      blank:
+      <h3 class="govuk-heading-s">Gateway Credentials</h3>
+      <ul class="govuk-list govuk-list--bullet">
+        <li>
+          <strong>Credential Kind: </strong>
+          <code>Static API key</code>
+        </li>
+        <li>
+          <strong>Gateway base URL: </strong>
+          <code>https://llm-gateway.i.ai.gov.uk</code>
+        </li>
+        <li>
+          <strong>Gateway API Key: </strong>
+          <code>[YOUR GATEWAY API KEY]</code>
+        </li>
+        <li>
+          <strong>Gateway auth scheme: </strong>
+          <code>bearer</code>
+        </li>
+      </ul>
+      <h3 class="govuk-heading-s">Models</h3>
+      <ul class="govuk-list govuk-list--bullet">
+        <li>
+          <strong>Model Discovery: </strong>
+          <p>
+            Enable if you want all available models on the gateway (
+            <strong>This will result in a significant amount of models</strong>)
+          </p>
+        </li>
+        <li>
+          <strong>Model List:</strong>
+          <p>
+            Add specific models onto the model list. the Model ID field should
+            correspond to{" "}
+            <a
+              class="govuk-link"
+              href="https://github.com/i-dot-ai/core-llm-gateway/blob/main/backend/config/config.yml"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              config.yml
+            </a>
+            , using the <strong>model_name</strong> identifier
+          </p>
+        </li>
+      </ul>
+    </li>
+  </ol>
+  <p class="govuk-body">
+    Once configured, you can use Claude Desktop with the gateway integration.
+  </p>
+
+  <h2 class="govuk-heading-l" id="add-your-key">
+    Add or renew your AI Gateway key
+  </h2>
+
+  <p class="govuk-body">If you do not have an AI Gateway key:</p>
+
+  <p class="govuk-body">
+    Copy your AI Gateway key (
+    <a class="govuk-link" href="/tooling/get-your-key">
+      how to get your key
+    </a>
+    ).
+  </p>
+</ToolingLayout>

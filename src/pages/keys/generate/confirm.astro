@@ -1,0 +1,115 @@
+---
+import GovukLayout from "../../../layouts/GovukLayout.astro";
+import {
+  BackLink,
+  WarningText,
+  Button,
+  ButtonGroup,
+  ErrorSummary,
+  ErrorSummaryTitle,
+  ErrorSummaryBody,
+  SummaryList,
+  SummaryListRow,
+  SummaryListKey,
+  SummaryListValue,
+  SummaryListActions,
+} from "@i-dot-ai-npm/component-library-astro";
+import {
+  buildKeyAlias,
+  getUserId,
+  getUserKeys,
+} from "../../../lib/litellmKeys";
+
+async function readAndClearFlash(key: string): Promise<string | undefined> {
+  const value = await Astro.session?.get(key);
+  if (value) {
+    Astro.session?.delete(key);
+  }
+  return value || undefined;
+}
+
+const email = (await Astro.session?.get("user-email")) ?? null;
+const keyName = await Astro.session?.get("pending-key-name");
+const teamId = await Astro.session?.get("pending-key-team-id");
+const teamName =
+  (await Astro.session?.get("pending-key-team-name")) || undefined;
+
+// No draft in session - either this page was reached directly, or the flow
+// already completed. Either way there's nothing to confirm.
+if (!email || !keyName) {
+  return Astro.redirect("/", 303);
+}
+
+const isTeamKey = teamId && teamName;
+const pageTitle = "Check your key's name identifies what it will be used for";
+const backLink = isTeamKey ? "/keys/generate/team" : "/keys/generate/personal";
+
+const flashError = await readAndClearFlash("flash-error");
+
+const alias = buildKeyAlias(email, keyName, teamName);
+
+// Read-only lookup, just to warn about a collision before it happens
+const { userId } = await getUserId(email);
+let willReplace = false;
+if (userId) {
+  const { keys } = await getUserKeys(userId);
+  willReplace = keys.some((k) => k.alias === alias);
+}
+---
+
+<GovukLayout title={pageTitle}>
+  <BackLink href={backLink}>Back</BackLink>
+
+  <h1 class="govuk-heading-xl">{pageTitle}</h1>
+
+  {flashError && (
+    <ErrorSummary>
+      <ErrorSummaryTitle>There is a problem</ErrorSummaryTitle>
+      <ErrorSummaryBody>
+        <p class="govuk-body">{flashError}</p>
+      </ErrorSummaryBody>
+    </ErrorSummary>
+  )}
+
+  <SummaryList>
+    <SummaryListRow>
+      <SummaryListKey>Key name</SummaryListKey>
+      <SummaryListValue>{keyName}</SummaryListValue>
+      <SummaryListActions>
+        <a class="govuk-link" href={backLink}>
+          Change<span class="govuk-visually-hidden"> key name</span>
+        </a>
+      </SummaryListActions>
+    </SummaryListRow>
+    {isTeamKey && (
+      <SummaryListRow>
+        <SummaryListKey>Team</SummaryListKey>
+        <SummaryListValue>{teamName}</SummaryListValue>
+        <SummaryListActions>
+          <a class="govuk-link" href={backLink}>
+            Change<span class="govuk-visually-hidden"> team</span>
+          </a>
+        </SummaryListActions>
+      </SummaryListRow>
+    )}
+  </SummaryList>
+
+  {willReplace && (
+    <WarningText>
+      A key named "{keyName}" already exists
+      {isTeamKey ? " for this team" : ""}. Confirming will replace it — the old
+      key will stop working immediately.
+    </WarningText>
+  )}
+
+  <form method="post" action="/api/keys/generate/confirm">
+    <ButtonGroup>
+      <Button type="submit">
+        {willReplace ? "Confirm and replace key" : "Confirm and create key"}
+      </Button>
+      <a class="govuk-link" href="/">
+        Cancel
+      </a>
+    </ButtonGroup>
+  </form>
+</GovukLayout>

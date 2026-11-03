@@ -1,0 +1,52 @@
+---
+// Shared breakdown table for the "Your usage" tabs so every tab presents its
+// figures the same way: a label column followed by right-aligned numeric
+// columns, with counts and percentages each in their own column rather than
+// concatenated into one string.
+export interface BreakdownRow {
+  label: string;
+  /** One string per numeric column, in the same order as the numeric headers. */
+  values: string[];
+}
+
+export interface Props {
+  heading: string;
+  /** First entry is the label column header; the rest are numeric columns. */
+  columns: string[];
+  rows: BreakdownRow[];
+}
+
+const { heading, columns, rows } = Astro.props;
+const [labelHeader, ...numericHeaders] = columns;
+import {
+  Table,
+  TableCaption,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableHeader,
+  TableCell,
+} from "@i-dot-ai-npm/component-library-astro";
+---
+
+<Table class="govuk-!-margin-top-3 govuk-!-margin-bottom-0">
+  <TableCaption class="govuk-visually-hidden">{heading}</TableCaption>
+  <TableHead>
+    <TableRow>
+      <TableHeader>{labelHeader}</TableHeader>
+      {numericHeaders.map((h) => (
+        <TableHeader numeric>{h}</TableHeader>
+      ))}
+    </TableRow>
+  </TableHead>
+  <TableBody>
+    {rows.map((r) => (
+      <TableRow>
+        <TableCell>{r.label}</TableCell>
+        {r.values.map((v) => (
+          <TableCell numeric>{v}</TableCell>
+        ))}
+      </TableRow>
+    ))}
+  </TableBody>
+</Table>

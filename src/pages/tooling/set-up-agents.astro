@@ -1,0 +1,316 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import CopyableCode from "../../components/CopyableCode.astro";
+import { InsetText } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<ToolingLayout title="Set up a project" currentPath="/tooling/set-up-agents">
+  <h1 class="govuk-heading-xl">Set up a project</h1>
+
+  <p class="govuk-body">
+    Before you start, make sure you have{" "}
+    <a href="/tooling/opencode" class="govuk-link">
+      set up OpenCode with AI Gateway
+    </a>
+    .
+  </p>
+
+  <p class="govuk-body">
+    A project is a dedicated workspace for a specific task or area. To set up a
+    project for OpenCode, you need to:
+  </p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      <a href="#create-project-folder" class="govuk-link">
+        create a project folder
+      </a>
+    </li>
+    <li>
+      <a href="#create-project-agent" class="govuk-link">
+        create a project-specific agent
+      </a>
+    </li>
+    <li>
+      (optional){" "}
+      <a href="#create-project-memory" class="govuk-link">
+        create project memory
+      </a>
+    </li>
+    <li>
+      (optional){" "}
+      <a href="/tooling/add-and-use-skills" class="govuk-link">
+        create project-specific skills
+      </a>
+    </li>
+    <li>
+      <a href="#use-your-project" class="govuk-link">
+        use your project
+      </a>
+    </li>
+  </ul>
+
+  <h2 class="govuk-heading-l" id="create-project-folder">
+    Create a project folder
+  </h2>
+
+  <p class="govuk-body">
+    Your project files are stored in a folder. Create it somewhere easy to find,
+    so you can add files later.
+  </p>
+
+  <p class="govuk-body">To set up a project folder:</p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Go to your <strong>Documents</strong> folder, right-click and select{" "}
+      <strong>New folder</strong>.
+    </li>
+    <li>Name your project (you can use underscores but no spaces).</li>
+    <li>Add any files or resources your project needs.</li>
+  </ol>
+
+  <p class="govuk-body">
+    You can organise your files in subfolders if you want to.
+  </p>
+
+  <InsetText>
+    OpenCode does not read all file formats. Use plain-text files, such as
+    Markdown (.md), .txt and .csv or export to PDF.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="create-project-agent">
+    Create a project-specific agent
+  </h2>
+
+  <p class="govuk-body">
+    Agents are text files with prompt instructions for the AI to follow. To make
+    a project-specific agent:
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Open Terminal, type:
+      <CopyableCode code="cd " />
+    </li>
+    <li>
+      Drag your project folder into the Terminal window to add the file path,
+      and press return.
+    </li>
+    <li>
+      To create a folder for your agent, in Terminal, run:
+      <CopyableCode code="mkdir -p .opencode/agents" />
+    </li>
+    <li>
+      To create your agent file, run:
+      <CopyableCode code="code .opencode/agents/<agent-name>.md" />
+      where <code class="app-code app-code--variable">
+        &lt;agent-name&gt;
+      </code>{" "}
+      is the name of the agent (use lowercase and hyphens or underscores, not
+      spaces).
+    </li>
+    <li>
+      Copy and paste the template into the file:
+      <CopyableCode
+        code={`---
+description: <DESCRIPTION>
+mode: primary
+model: litellm/bedrock-claude-sonnet-4-5-eu
+permission:
+  edit: deny
+  bash: deny
+  external_directory: deny
+---
+
+<INSTRUCTIONS>`}
+      />
+    </li>
+    <li>
+      Edit the template for your needs:
+      <ul class="govuk-list govuk-list--bullet">
+        <li>
+          replace{" "}
+          <code class="app-code app-code--variable">&lt;DESCRIPTION&gt;</code>{" "}
+          with a short description of what the agent does
+        </li>
+        <li>
+          change <code class="app-code">mode</code> to{" "}
+          <code class="app-code">primary</code> (cycle with tab) or{" "}
+          <code class="app-code">subagent</code> (invoked by other agents or
+          with @mention)
+        </li>
+        <li>
+          change the model if you want it to always use a specific one, or
+          delete the line to use whichever model you have selected
+        </li>
+        <li>
+          change the permissions (<code class="app-code">edit</code>,{" "}
+          <code class="app-code">bash</code>,{" "}
+          <code class="app-code">external_directory</code>) to{" "}
+          <code class="app-code">allow</code>, <code class="app-code">ask</code>
+          , or <code class="app-code">deny</code>
+        </li>
+        <li>
+          replace{" "}
+          <code class="app-code app-code--variable">&lt;INSTRUCTIONS&gt;</code>{" "}
+          with your prompt instructions
+        </li>
+      </ul>
+    </li>
+    <li>Save the file.</li>
+    <li>
+      Check it works:
+      <ul class="govuk-list govuk-list--bullet">
+        <li>open Terminal and navigate to your project folder</li>
+        <li>
+          run <code class="app-code">opencode</code> to start OpenCode
+        </li>
+        <li>
+          press <code class="app-code">tab</code> to see available agents - your
+          new agent should appear
+        </li>
+      </ul>
+    </li>
+  </ol>
+
+  <h3 class="govuk-heading-m">Example agent</h3>
+
+  <p class="govuk-body">
+    This example creates a content review agent saved as{" "}
+    <code class="app-code">content-review.md</code>:
+  </p>
+
+  <CopyableCode
+    code={`---
+description: Reviews content against GOV.UK style guidelines
+mode: primary
+model: litellm/bedrock-claude-sonnet-4-5-eu
+permission:
+  edit: deny
+  bash: deny
+  external_directory: ask
+---
+
+You are a GOV.UK content designer. Review any content I share against GOV.UK style guidelines. Flag issues and suggest improvements.
+
+Use plain English, short sentences, and active voice.`}
+  />
+
+  <p class="govuk-body">
+    This example is illustrative, and the description has been shortened.
+  </p>
+
+  <h2 class="govuk-heading-l" id="create-project-memory">
+    Create project memory
+  </h2>
+
+  <p class="govuk-body">
+    OpenCode does not remember previous sessions. Each new session starts fresh.
+    To make sure your agent remembers between sessions:
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Open Terminal, type:
+      <CopyableCode code="cd " />
+    </li>
+    <li>
+      Drag your project folder into the Terminal window to add the file path,
+      and press return.
+    </li>
+    <li>
+      To make your notes file, run:
+      <CopyableCode code="touch notes.md" />
+    </li>
+    <li>
+      To open your agent instructions, run:
+      <CopyableCode code="code .opencode/agents/<agent-name>.md" />
+    </li>
+    <li>
+      At the start of your instructions, add:
+      <CopyableCode
+        code={`At the start of each session, read notes.md.
+
+Update notes.md after you finish a task or we make a decision. Keep these sections:
+- Current status: where the work is now
+- Decisions: what we decided and why
+- Next steps: what still needs to be done
+
+Replace out-of-date information rather than adding to it.`}
+      />
+    </li>
+    <li>Save the file.</li>
+  </ol>
+
+  <p class="govuk-body">
+    To use memory, ask the AI to "update the notes" at the end of each session.
+    To review and edit notes, run:
+  </p>
+
+  <CopyableCode code="code notes.md" />
+
+  <h2 class="govuk-heading-l" id="use-your-project">
+    Use your project
+  </h2>
+
+  <p class="govuk-body">To use your project:</p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Open Terminal, type:
+      <CopyableCode code="cd " />
+    </li>
+    <li>
+      Drag your project folder into the Terminal window to add the file path,
+      and press return.
+    </li>
+    <li>
+      To start OpenCode, run:
+      <CopyableCode code="opencode" />
+    </li>
+  </ol>
+
+  <p class="govuk-body">You start with 2 agents every time you use OpenCode:</p>
+
+  <ul class="govuk-list govuk-list--bullet">
+    <li>
+      <strong>Plan</strong> - use this by default, it will ask you before making
+      any changes to files
+    </li>
+    <li>
+      <strong>Build</strong> - use this to create or edit files
+    </li>
+  </ul>
+
+  <p class="govuk-body">
+    Press <code class="app-code">tab</code> to switch between agents. Your
+    project-specific agents will also appear here.
+  </p>
+
+  <h3 class="govuk-heading-m">Change sessions</h3>
+
+  <p class="govuk-body">
+    Each conversation you have with AI is called a session. To switch between
+    sessions:
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Open Terminal, type:
+      <CopyableCode code="cd " />
+    </li>
+    <li>
+      Drag your project folder into the Terminal window to add the file path,
+      and press return.
+    </li>
+    <li>
+      To start OpenCode, run:
+      <CopyableCode code="opencode" />
+    </li>
+    <li>
+      To view available sessions, type:
+      <CopyableCode code="/sessions" />
+    </li>
+  </ol>
+</ToolingLayout>

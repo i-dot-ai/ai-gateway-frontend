@@ -1,0 +1,160 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import CopyableCode from "../../components/CopyableCode.astro";
+import { InsetText } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<ToolingLayout title="Set up Pi" currentPath="/tooling/pi">
+  <h1 class="govuk-heading-xl">Set up Pi</h1>
+
+  <p class="govuk-body">
+    Pi is a terminal-based coding agent. If you connect it to the AI Gateway it
+    will give you access to any{" "}
+    <a class="govuk-link" href="/models">
+      available AI model
+    </a>{" "}
+    (for example, Claude or Gemini).
+  </p>
+
+  <figure class="govuk-!-margin-bottom-6">
+    <img
+      src="/assets/images/gateway-diagram-pi.svg"
+      alt="Diagram showing Pi running in the terminal, connecting to the AI Gateway, which provides access to Claude, Gemini, GPT and other AI models."
+      class="govuk-!-width-full"
+    />
+  </figure>
+
+  <p class="govuk-body">
+    Before you start, make sure you have{" "}
+    <a class="govuk-link" href="/tooling/get-your-key">
+      your AI Gateway key
+    </a>
+    . Then, to set up Pi, you need to:
+  </p>
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      <a class="govuk-link" href="#use-admin-permissions">
+        Use admin permissions
+      </a>
+    </li>
+    <li>
+      <a class="govuk-link" href="#install-pi">
+        Install Pi and add your AI Gateway key
+      </a>
+    </li>
+  </ol>
+
+  <InsetText>
+    These steps work for most setups. If you run into issues you can't resolve,
+    contact us in the #ai-model-gateway-team channel on i.AI Slack.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="use-admin-permissions">
+    Use admin permissions
+  </h2>
+
+  <p class="govuk-body">
+    You need (temporary) admin permissions to install software on your Mac.
+  </p>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Select the padlock icon (<strong>Local Admin Management</strong>) on the
+      top menu bar.
+    </li>
+    <li>
+      Choose <strong>Install an app</strong>.
+    </li>
+    <li>
+      Select <strong>Start session</strong>, and enter your laptop password.
+    </li>
+    <li>
+      Select <strong>OK</strong>.
+    </li>
+  </ol>
+
+  <InsetText>
+    These permissions last for 10 minutes. Select the padlock to request more
+    time.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="install-pi">
+    Install Pi and add your AI Gateway key
+  </h2>
+
+  <InsetText>
+    Requires macOS and Node 22.19.0 or newer (
+    <code class="app-code">node -v</code> to check).
+  </InsetText>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      To install Pi, in Terminal, run:
+      <CopyableCode code="curl -fsSL https://pi.dev/install.sh | sh" />
+    </li>
+    <li>
+      To install the LiteLLM extension, run:
+      <CopyableCode code="pi install npm:pi-provider-litellm" />
+    </li>
+  </ol>
+
+  <h3 class="govuk-heading-m" id="pi-add-your-key">
+    Add or renew your key
+  </h3>
+
+  <ol class="govuk-list govuk-list--number">
+    <li>
+      Copy your AI Gateway key (
+      <a class="govuk-link" href="/tooling/get-your-key">
+        how to get your key
+      </a>
+      ).
+    </li>
+    <li>
+      To start Pi, in Terminal, run <code class="app-code">pi</code> from any
+      project directory, then log in:
+      <CopyableCode code="/login litellm" />
+    </li>
+    <li>
+      Choose <strong>Sign in with an API key</strong>.
+    </li>
+    <li>
+      Enter:
+      <CopyableCode code="https://llm-gateway.i.ai.gov.uk" />
+    </li>
+    <li>Paste your AI Gateway key.</li>
+    <li>
+      To confirm it worked, run:
+      <CopyableCode code="/model" />
+      <p class="govuk-body">
+        Gateway models appear as{" "}
+        <code class="app-code">litellm/&lt;model-name&gt;</code>.
+      </p>
+    </li>
+  </ol>
+
+  <p class="govuk-body">
+    Nothing to maintain after that: opening <code class="app-code">/model</code>{" "}
+    refreshes the model list in the background, and{" "}
+    <code class="app-code">pi update --models</code> forces it. See the{" "}
+    <a
+      class="govuk-link"
+      href="https://pi.dev/"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Pi documentation
+    </a>{" "}
+    for troubleshooting (including TLS/certificate errors on networks that
+    intercept HTTPS) and how to disable the MCP tools and skills the extension
+    enables by default.
+  </p>
+
+  <InsetText>
+    To renew an expired key, repeat the{" "}
+    <a class="govuk-link" href="#pi-add-your-key">
+      Add your key
+    </a>{" "}
+    steps above with your new key.
+  </InsetText>
+</ToolingLayout>

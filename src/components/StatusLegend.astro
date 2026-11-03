@@ -1,0 +1,61 @@
+---
+// The colour key for the StatusTimeline strip. Shared by the models list and
+// each model's detail page so the swatch markup, labels and palette live in one
+// place. Purely decorative (aria-hidden) - the timeline itself carries the
+// accessible status text.
+import { STATUSES, statusLabel } from "../lib/health";
+---
+
+<ul class="app-status-legend" aria-hidden="true">
+  {STATUSES.map((status) => (
+    <li class="app-status-legend__item">
+      <span
+        class:list={["app-status-legend__swatch", `app-status-seg--${status}`]}
+      />
+      {statusLabel(status)}
+    </li>
+  ))}
+</ul>
+
+<style>
+  .app-status-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    /* Match GOV.UK body text (the bare <li>s don't inherit a govuk class). */
+    font-family: "Inter", Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 0.875rem;
+    color: var(--govuk-secondary-text-colour);
+  }
+
+  .app-status-legend__item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .app-status-legend__swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    /* No-data is the base colour; the palette overrides below match the
+  		   StatusTimeline segments (GOV.UK green / yellow / red). */
+    background-color: #dee0e2;
+  }
+
+  .app-status-legend__swatch.app-status-seg--operational {
+    background-color: var(--govuk-success-colour);
+  }
+  .app-status-legend__swatch.app-status-seg--degraded {
+    background-color: #ffdd00;
+  }
+  .app-status-legend__swatch.app-status-seg--outage {
+    background-color: var(--govuk-error-colour);
+  }
+</style>

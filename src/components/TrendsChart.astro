@@ -1,0 +1,194 @@
+---
+import { CHART_ACCENT } from "../lib/usage";
+
+/**
+ * One line-chart panel for the trends page - a metric over time. Like
+ * UsageChart.astro (the home page bar chart), it serialises its data into a canvas data-*
+ * attribute and draws it in a client script. That script renders every
+ * `.trends-chart` canvas on the page, so panels can be added without a script each.
+ */
+export interface TrendsChartData {
+  /** YYYY-MM-DD each point's bucket starts on - the x-axis. */
+  labels: ReadonlyArray<string>;
+  /** The span each point covers ("9 Sept to 15 Sept 2026"), for the tooltip title. */
+  spans: ReadonlyArray<string>;
+  /** What a point is, for the tooltip ("Tokens"). */
+  label: string;
+  data: ReadonlyArray<number>;
+}
+
+export interface Props {
+  /** Unique canvas id - several panels share the page. */
+  id: string;
+  title: string;
+  chartData: TrendsChartData;
+  /** How to format axis ticks and tooltip values. */
+  valueFormat: "count" | "spend" | "tokens";
+  /** Line colour: hex or a `var(--token)`. Defaults to the kit's primary chart blue. */
+  color?: string;
+}
+
+const { id, title, chartData, valueFormat, color = CHART_ACCENT } = Astro.props;
+---
+
+<div class="app-trend-chart">
+  <h3 class="govuk-heading-s govuk-!-margin-bottom-2">{title}</h3>
+  <canvas
+    class="trends-chart"
+    id={id}
+    data-chart={JSON.stringify(chartData)}
+    data-format={valueFormat}
+    data-color={color}
+    height="280"
+  ></canvas>
+</div>
+
+<script>
+  import {
+    Chart,
+    LineController,
+    LineElement,
+    PointElement,
+    CategoryScale,
+    LinearScale,
+    Tooltip,
+    Filler,
+  } from "chart.js";
+  import {
+    chartFont,
+    formatChartDate,
+    formatChartValue,
+    formatChartTick,
+    themeColour,
+    CHART_ACCENT,
+    CHART_GRID_COLOR,
+    CHART_TICK_COLOR,
+  } from "../lib/usage";
+
+  // Importing pieces individually (not chart.js/auto) skips the auto-registered
+  // plugins, so register the ones we use - Filler draws the area under the line.
+  Chart.register(
+    LineController,
+    LineElement,
+    PointElement,
+    CategoryScale,
+    LinearScale,
+    Tooltip,
+    Filler,
+  );
+
+  const font = chartFont();
+  const tickColor = themeColour(CHART_TICK_COLOR);
+
+  // A translucent fill for the area. Accepts #rgb or #rrggbb.
+  function withAlpha(hex: string, alpha: number): string {
+    let h = hex.replace("#", "");
+    if (h.length === 3)
+      h = h
+        .split("")
+        .map((c) => c + c)
+        .join("");
+    const n = parseInt(h, 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  }
+
+  for (const canvas of document.querySelectorAll<HTMLCanvasElement>(
+    "canvas.trends-chart",
+  )) {
+    const chartData = JSON.parse(canvas.dataset.chart ?? "{}");
+    const format = canvas.dataset.format ?? "count";
+    const color = themeColour(canvas.dataset.color ?? CHART_ACCENT);
+    // Few points (weekly or 30-day buckets) read better with markers; a daily run doesn't need them.
+    const pointRadius = chartData.data.length <= 31 ? 3 : 0;
+
+    new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: chartData.labels.map((label: string) => formatChartDate(label)),
+        datasets: [
+          {
+            label: chartData.label,
+            data: chartData.data,
+            // Monotone curves never overshoot between points, so the line can't invent a peak or dip.
+            cubicInterpolationMode: "monotone",
+            borderWidth: 3,
+            borderColor: color,
+            backgroundColor: withAlpha(color, 0.12),
+            pointRadius,
+            pointHoverRadius: 5,
+            pointBackgroundColor: color,
+            fill: "origin",
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          tooltip: {
+            titleFont: font,
+            bodyFont: font,
+            callbacks: {
+              title: (items: { dataIndex: number }[]) =>
+                chartData.spans[items[0]?.dataIndex ?? 0] ?? "",
+              label: (ctx: {
+                dataset: { label?: string };
+                parsed: { y: number | null };
+              }) =>
+                `${ctx.dataset.label}: ${formatChartValue(ctx.parsed.y ?? 0, format)}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: {
+              font,
+              color: tickColor,
+              maxRotation: 0,
+              autoSkip: true,
+              autoSkipPadding: 24,
+              maxTicksLimit: 8,
+              // Drop the year ("23 Jun 2026" -> "23 Jun"); the tooltip keeps the full span.
+              callback(
+                this: { getLabelForValue(v: number): string },
+                value: number | string,
+              ) {
+                return this.getLabelForValue(Number(value)).replace(
+                  / \d{4}$/,
+                  "",
+                );
+              },
+            },
+          },
+          y: {
+            beginAtZero: true,
+            border: { display: false },
+            grid: { color: CHART_GRID_COLOR },
+            ticks: {
+              font,
+              color: tickColor,
+              maxTicksLimit: 6,
+              callback: (
+                value: number | string,
+                _i: number,
+                ticks: { value: number }[],
+              ) => formatChartTick(Number(value), format, ticks),
+            },
+          },
+        },
+      },
+    });
+  }
+</script>
+
+<style>
+  .app-trend-chart {
+    margin-bottom: 30px;
+  }
+
+  .app-trend-chart canvas {
+    max-height: 320px;
+  }
+</style>

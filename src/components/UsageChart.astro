@@ -1,0 +1,211 @@
+---
+/**
+ * One stacked bar-chart panel for the "Your usage" tabs - a metric bucketed over
+ * the selected period, split into stacked series (per model for spend/tokens, or
+ * succeeded/failed for requests). Like TrendsChart.astro it serialises its data
+ * into a canvas data-* attribute and draws it in a client script that renders
+ * every `.usage-chart` canvas on the page, so panels add without a script each.
+ *
+ * The tooltip lists each non-zero series for the hovered bucket on its own line,
+ * then the bucket total, so a stacked bar reads at a glance.
+ */
+export interface Props {
+  /** Unique canvas id - several panels share the page. */
+  id: string;
+  /** Short x-axis labels, e.g. "23 Sep". */
+  labels: string[];
+  /** Tooltip titles - the full span each bucket covers, e.g. "23 Jun to 29 Jun". */
+  titles: string[];
+  /** Stacked series, drawn bottom-to-top in order. */
+  datasets: Array<{ label: string; data: number[] }>;
+  /** Bar colours, applied to datasets in order. */
+  colors: string[];
+  yLabel: string;
+  /** How to format axis ticks and tooltip values. */
+  valueFormat: "count" | "spend" | "tokens";
+  /** Accessible description of the chart. */
+  caption: string;
+}
+
+const { id, labels, titles, datasets, colors, yLabel, valueFormat, caption } =
+  Astro.props;
+const data = JSON.stringify({
+  labels,
+  titles,
+  datasets,
+  colors,
+  yLabel,
+  format: valueFormat,
+});
+---
+
+<figure class="app-usage-chart">
+  <canvas
+    class="usage-chart"
+    id={id}
+    data-chart={data}
+    role="img"
+    aria-label={caption}
+    height="220"
+  ></canvas>
+</figure>
+
+<script>
+  import {
+    Chart,
+    BarController,
+    BarElement,
+    CategoryScale,
+    LinearScale,
+    Tooltip,
+    Legend,
+  } from "chart.js";
+  import {
+    chartFont,
+    compactAxis,
+    formatChartValue,
+    formatChartTick,
+    CHART_GRID_COLOR,
+    CHART_TICK_COLOR,
+    themeColour,
+  } from "../lib/usage";
+
+  // Cherry-picking controllers/elements (not chart.js/auto) skips the
+  // auto-registered plugins, so register the ones we use.
+  Chart.register(
+    BarController,
+    BarElement,
+    CategoryScale,
+    LinearScale,
+    Tooltip,
+    Legend,
+  );
+
+  type Payload = {
+    labels: string[];
+    titles: string[];
+    datasets: { label: string; data: number[] }[];
+    colors: string[];
+    yLabel: string;
+    format: string;
+  };
+
+  const tickColor = themeColour(CHART_TICK_COLOR);
+  const font = chartFont();
+
+  for (const canvas of document.querySelectorAll<HTMLCanvasElement>(
+    "canvas.usage-chart",
+  )) {
+    const { labels, titles, datasets, colors, yLabel, format } = JSON.parse(
+      canvas.dataset.chart ?? "{}",
+    ) as Payload;
+    const multi = datasets.length > 1;
+
+    // Spend keeps Chart.js's own $ scale; token/count scales are pinned to a
+    // whole-unit max and step (via the tallest stacked bar) so ticks stay decimal-free.
+    const stackedMax = Math.max(
+      0,
+      ...labels.map((_, i) =>
+        datasets.reduce((sum, d) => sum + (d.data[i] ?? 0), 0),
+      ),
+    );
+    const axis = format === "spend" ? null : compactAxis(stackedMax);
+
+    new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: datasets.map((d, i) => ({
+          label: d.label,
+          data: d.data,
+          backgroundColor: themeColour(colors[i % colors.length]),
+        })),
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: {
+            display: multi,
+            position: "top",
+            align: "end",
+            labels: { font: font, boxWidth: 12, boxHeight: 12 },
+          },
+          tooltip: {
+            titleFont: font,
+            bodyFont: font,
+            footerFont: font,
+            // One line per series with a value here; a "" label would still
+            // leave a blank swatch row, so filter zero segments out instead.
+            filter: (item: { parsed: { y: number | null } }) =>
+              (item.parsed.y ?? 0) !== 0,
+            callbacks: {
+              title: (items: { dataIndex: number }[]) =>
+                titles[items[0]?.dataIndex] ?? "",
+              label: (ctx: {
+                dataset: { label?: string };
+                parsed: { y: number | null };
+              }) =>
+                `${ctx.dataset.label}: ${formatChartValue(ctx.parsed.y ?? 0, format)}`,
+              // The stacked total, so a bar reads without summing its parts.
+              footer: (items: { parsed: { y: number | null } }[]) =>
+                `Total: ${formatChartValue(
+                  items.reduce((s, it) => s + (it.parsed.y ?? 0), 0),
+                  format,
+                )}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            stacked: true,
+            grid: { display: false },
+            ticks: {
+              font: font,
+              color: tickColor,
+              maxRotation: 0,
+              autoSkip: true,
+              autoSkipPadding: 16,
+              maxTicksLimit: 8,
+            },
+          },
+          y: {
+            stacked: true,
+            beginAtZero: true,
+            ...(axis ? { max: axis.max } : {}),
+            border: { display: false },
+            grid: { color: CHART_GRID_COLOR },
+            title: {
+              display: true,
+              text: yLabel,
+              font: font,
+              color: tickColor,
+            },
+            ticks: {
+              font: font,
+              color: tickColor,
+              maxTicksLimit: 6,
+              ...(axis ? { stepSize: axis.stepSize } : {}),
+              callback: (
+                value: number | string,
+                _i: number,
+                ticks: { value: number }[],
+              ) => formatChartTick(Number(value), format, ticks),
+            },
+          },
+        },
+      },
+    });
+  }
+</script>
+
+<style>
+  .app-usage-chart {
+    margin: 0;
+  }
+
+  .app-usage-chart canvas {
+    max-height: 240px;
+  }
+</style>

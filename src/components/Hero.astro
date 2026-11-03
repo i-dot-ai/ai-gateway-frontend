@@ -1,0 +1,35 @@
+---
+// Homepage hero banner, styled after the GOV.UK Design System "hero" pattern
+// (design-system.service.gov.uk/patterns/hero). Kept as its own component,
+// rather than a named slot in GovukLayout, since only the homepage uses it.
+import { Button } from "@i-dot-ai-npm/component-library-astro";
+---
+
+<div class="app-hero">
+  <div class="govuk-width-container app-hero__content govuk-!-padding-top-6 govuk-!-padding-bottom-6">
+    <div class="govuk-grid-row">
+      <div class="govuk-grid-column-two-thirds">
+        <h1 class="govuk-heading-xl app-masthead__title">
+          Access many models through one API
+        </h1>
+        <p class="govuk-body-l app-masthead__body">
+          Find the right model, connect to it and keep track of what you spend.
+        </p>
+        <Button href="/tooling" inverse startButton>
+          Learn how to use the Gateway
+        </Button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .app-hero {
+    background-color: var(--govuk-brand-colour);
+    color: #ffffff;
+  }
+
+  .app-hero h1 {
+    color: #ffffff;
+  }
+</style>

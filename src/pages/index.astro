@@ -1,18 +1,381 @@
 ---
-// Placeholder page so the build (and the Docker image) still works while this
-// repo holds only the build/deploy plumbing. The real application code lives in
-// https://github.com/i-dot-ai/core-llm-gateway and will be migrated here.
+import GovukLayout from "../layouts/GovukLayout.astro";
+import Hero from "../components/Hero.astro";
+import BudgetMeter from "../components/BudgetMeter.astro";
+import TimeframeNav from "../components/TimeframeNav.astro";
+import UsageTabs from "../components/UsageTabs.astro";
+import {
+  Tag,
+  Button,
+  ButtonGroup,
+  Details,
+  DetailsSummary,
+  DetailsText,
+  ErrorMessage,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableHeader,
+  TableCell,
+} from "@i-dot-ai-npm/component-library-astro";
+import { getCosts } from "../lib/litellm";
+import {
+  getUserId,
+  getUserKeys,
+  keyName,
+  type UserBudget,
+} from "../lib/litellmKeys";
+import { DEFAULT_TIMEFRAME, getDateRange, parseTimeframe } from "../lib/costs";
+import {
+  bucketSpans,
+  bucketValues,
+  formatDay,
+  formatSpan,
+  formatTokens,
+  granularityFor,
+  listDates,
+  scaleBars,
+  shiftDate,
+  summariseKeyActivity,
+  type Granularity,
+  type KeyActivity,
+} from "../lib/usage";
+
+const userEmail = (await Astro.session?.get("user-email")) ?? null;
+
+// The timeframe governs the "Your usage" tabs (the keys Activity sparkline keeps
+// its own fixed 30-day window). Defaults to the last 30 days; an unrecognised
+// value falls back to that rather than trusting arbitrary query input.
+const timeframe = parseTimeframe(
+  Astro.url.searchParams.get("timeframe"),
+  DEFAULT_TIMEFRAME,
+);
+
+let keys: Awaited<ReturnType<typeof getUserKeys>>["keys"] = [];
+let keysError: string | undefined;
+let hasAccount = false;
+let budget: UserBudget | undefined;
+let userId: string | undefined;
+
+if (userEmail) {
+  const { userId: resolvedUserId, error: userIdError } =
+    await getUserId(userEmail);
+  if (userIdError) {
+    keysError = userIdError;
+  } else if (resolvedUserId) {
+    userId = resolvedUserId;
+    hasAccount = true;
+    const result = await getUserKeys(resolvedUserId);
+    keys = result.keys;
+    keysError = result.error;
+    budget = result.budget;
+  }
+}
+
+// Your usage over the selected timeframe. Only worth fetching once we know
+// they have keys to attribute usage to.
+let usageResult: Awaited<ReturnType<typeof getCosts>> | undefined;
+
+// The keys Activity sparkline is a fixed "recent use" indicator - always the
+// last 30 days, independent of the usage timeframe below - so it reads the same
+// however the usage period is set.
+const ACTIVITY_WINDOW_DAYS = 30;
+const aliases = keys.map((k) => k.alias);
+let activityDays: string[] = [];
+let activityRows: Awaited<ReturnType<typeof getCosts>>["costs"] = [];
+let activityError: string | undefined;
+if (keys.length > 0) {
+  const { startDate, endDate } = getDateRange(timeframe);
+  const days = listDates(startDate, endDate);
+  // The activity window ends on the same day as the usage window.
+  const activityStart = shiftDate(endDate, -(ACTIVITY_WINDOW_DAYS - 1));
+  activityDays = listDates(activityStart, endDate);
+  // The usage window already spans the activity window for 30 days or more, so
+  // only the 7-day window needs a second fetch to reach back a full 30 days.
+  const activityNeedsFetch = days.length < activityDays.length;
+  const [usageFetch, activityResult] = await Promise.all([
+    // Scoped to this user's keys - the home view only totals their own usage,
+    // so there's no need to pull (and filter down from) the whole platform.
+    getCosts(startDate, endDate, userId),
+    activityNeedsFetch
+      ? getCosts(activityStart, endDate, userId)
+      : Promise.resolve(null),
+  ]);
+  // Drop rows from keys the user no longer has (e.g. deleted): the user_id
+  // scope covers every key they ever owned, but the view only shows current ones.
+  const aliasSet = new Set(aliases);
+  usageResult = {
+    ...usageFetch,
+    costs: usageFetch.costs.filter((c) => aliasSet.has(c.key_alias)),
+    providerCosts: usageFetch.providerCosts.filter((c) =>
+      aliasSet.has(c.key_alias),
+    ),
+  };
+  // summariseKeyActivity only emits dates in `activityDays`, so reusing the
+  // wider usage rows here still yields exactly the fixed 30-day window.
+  const activitySource = activityResult ?? usageFetch;
+  activityError = activitySource.error;
+  activityRows = activitySource.costs;
+}
+
+// The keys Activity sparkline buckets its own fixed 30-day window; activitySpans
+// gives each bucket's span for the sparkline tooltips.
+const activityGranularity: Granularity = granularityFor(activityDays.length);
+const activitySpans = bucketSpans(activityDays, activityGranularity);
+
+// Per-key activity needs its 30-day rows, so it only shows when that fetch succeeded.
+const showActivity = keys.length > 0 && !activityError;
+const today =
+  activityDays.length > 0 ? activityDays[activityDays.length - 1] : "";
+
+function daysAgo(date: string): number {
+  const ms =
+    new Date(`${today}T00:00:00Z`).getTime() -
+    new Date(`${date}T00:00:00Z`).getTime();
+  return Math.round(ms / 86_400_000);
+}
+
+function lastUsedLabel(activity: KeyActivity): string {
+  if (!activity.lastActive) return "Not used";
+  const ago = daysAgo(activity.lastActive);
+  if (ago <= 0) return "Used today";
+  if (ago === 1) return "Used yesterday";
+  return `Used ${ago} days ago`;
+}
+
+// Pair each key with its activity and, when we have usage data, list the most
+// recently used first (unused keys fall to the bottom). Array.sort is stable,
+// so keys last used on the same day keep their original order.
+const keyRows = keys.map((k) => {
+  const activity = summariseKeyActivity(activityRows, k.alias, activityDays);
+  return {
+    key: k,
+    activity,
+    bars: bucketValues(activity.daily, activityGranularity),
+  };
+});
+if (showActivity) {
+  const rank = (date: string | null) =>
+    date ? new Date(`${date}T00:00:00Z`).getTime() : 0;
+  keyRows.sort(
+    (a, b) => rank(b.activity.lastActive) - rank(a.activity.lastActive),
+  );
+}
+
+function daysLeft(expires?: string): number | null {
+  if (!expires) return null;
+  const ms = new Date(expires).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
+
+function daysLeftLabel(days: number): string {
+  return `${days} ${days === 1 ? "day" : "days"} left`;
+}
+
+/** Tag colour for a key expiring soon, or null to show plain text. */
+function expiryTagColour(days: number): "red" | "yellow" | null {
+  if (days <= 1) return "red";
+  if (days <= 3) return "yellow";
+  return null;
+}
+
+function teamLabel(alias: string): string {
+  const parts = alias.split("/");
+  const team = parts.length === 3 ? parts[0] : "personal";
+  return team === "personal" ? "Personal" : team;
+}
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AI Gateway Frontend</title>
-  </head>
-  <body>
-    <h1>AI Gateway Frontend</h1>
-    <p>Skeleton — application code not yet migrated.</p>
-  </body>
-</html>
+<GovukLayout title="Home">
+  <Hero slot="hero" />
+
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-full">
+      <h2 class="govuk-heading-l govuk-!-margin-bottom-4">Create a new key</h2>
+      <p class="govuk-body">
+        All tools need an AI Gateway key, which connects to your budget
+        allowance.
+      </p>
+      <ButtonGroup class="govuk-!-margin-bottom-4">
+        <Button href="/keys/generate/personal">Create a personal key</Button>
+        <Button href="/keys/generate/team">Create a team key</Button>
+      </ButtonGroup>
+
+      <Details class="govuk-!-margin-bottom-0">
+        <DetailsSummary> Which kind of key do I need? </DetailsSummary>
+        <DetailsText>
+          <p class="govuk-body">There are 3 kinds of key, a:</p>
+          <ul class="govuk-list govuk-list--bullet">
+            <li>
+              <strong>personal key</strong> for your own use (such as
+              performance management or personal development)
+            </li>
+            <li>
+              <strong>team key</strong> for team and professional work (such as
+              prototyping, evaluation or development to support your profession)
+            </li>
+            <li>
+              <strong>product key</strong> for use by products (if you need
+              this, contact us in the #ai-model-gateway-team channel on i.AI
+              Slack)
+            </li>
+          </ul>
+        </DetailsText>
+      </Details>
+    </div>
+  </div>
+
+  {budget && (
+    <div class="govuk-grid-row govuk-!-margin-top-8">
+      <div class="govuk-grid-column-full">
+        <h2 class="govuk-heading-l govuk-!-margin-bottom-4">Your budget</h2>
+        <BudgetMeter budget={budget} />
+      </div>
+    </div>
+  )}
+
+  <div class="govuk-grid-row govuk-!-margin-top-8">
+    <div class="govuk-grid-column-full">
+      <h2 class="govuk-heading-l govuk-!-margin-bottom-4">Your keys</h2>
+
+      {keysError ? (
+        <ErrorMessage class="govuk-body" visuallyHiddenText="">
+          {keysError}
+        </ErrorMessage>
+      ) : keys.length === 0 ? (
+        <p class="govuk-body">
+          You do not have any keys yet. Create one to get started. This will
+          also set up your AI Gateway account.
+        </p>
+      ) : (
+        <>
+          <p class="govuk-body">
+            These are the keys you have available. You can also create a new
+            key.
+          </p>
+          <div class="app-table-wrap">
+            <Table class="govuk-!-margin-bottom-0">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Name</TableHeader>
+                  <TableHeader>Team</TableHeader>
+                  {showActivity && <TableHeader>Activity</TableHeader>}
+                  {showActivity && <TableHeader>Last used</TableHeader>}
+                  <TableHeader>Expiry date</TableHeader>
+                  <TableHeader>
+                    <span class="govuk-visually-hidden">Actions</span>
+                  </TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {keyRows.map(({ key: k, activity, bars }) => {
+                  const expiryDays = daysLeft(k.expires);
+                  return (
+                    <TableRow>
+                      <TableHeader scope="row">{keyName(k.alias)}</TableHeader>
+                      <TableCell>{teamLabel(k.alias)}</TableCell>
+                      {showActivity && (
+                        <TableCell>
+                          <span class="app-spark" aria-hidden="true">
+                            {scaleBars(bars, 12).map((h, i) => (
+                              <span
+                                class:list={[
+                                  "app-spark__bar",
+                                  { "app-spark__bar--on": bars[i] > 0 },
+                                ]}
+                                style={`height:${h}%`}
+                                title={`${formatSpan(activitySpans[i], formatDay)}: ${formatTokens(bars[i])} tokens`}
+                              />
+                            ))}
+                          </span>
+                        </TableCell>
+                      )}
+                      {showActivity && (
+                        <TableCell noWrap>{lastUsedLabel(activity)}</TableCell>
+                      )}
+                      <TableCell>
+                        {expiryDays === null ? (
+                          "Never"
+                        ) : expiryTagColour(expiryDays) ? (
+                          <Tag colour={expiryTagColour(expiryDays)!}>
+                            {daysLeftLabel(expiryDays)}
+                          </Tag>
+                        ) : (
+                          daysLeftLabel(expiryDays)
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <a
+                          class="govuk-link"
+                          href={`/keys/${encodeURIComponent(k.token)}/delete`}
+                        >
+                          Delete
+                          <span class="govuk-visually-hidden">
+                            {" "}
+                            {keyName(k.alias)}
+                          </span>
+                        </a>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+
+  <div class="govuk-grid-row govuk-!-margin-top-8">
+    <div class="govuk-grid-column-full">
+      {usageResult && (
+        <>
+          <h2 id="your-usage" class="govuk-heading-l govuk-!-margin-bottom-4">
+            Your usage
+          </h2>
+          <TimeframeNav current={timeframe} anchor="your-usage" />
+          {usageResult.error ? (
+            <p class="govuk-body">Usage is unavailable right now.</p>
+          ) : (
+            <UsageTabs
+              costs={usageResult.costs}
+              providerCosts={usageResult.providerCosts}
+              timeframe={timeframe}
+              breakdown="model"
+            />
+          )}
+        </>
+      )}
+    </div>
+  </div>
+</GovukLayout>
+
+<style>
+  /* The keys table scrolls sideways on narrow viewports rather than overflowing
+  	   the page. position: relative contains the Delete links' visually-hidden
+  	   (absolute) labels so they can't add a phantom page scrollbar. */
+  .app-table-wrap {
+    overflow-x: auto;
+    position: relative;
+  }
+
+  .app-spark {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    width: 120px;
+    height: 24px;
+  }
+
+  .app-spark__bar {
+    flex: 1;
+    min-height: 2px;
+    background-color: var(--govuk-border-colour);
+  }
+
+  .app-spark__bar--on {
+    background-color: #1d70b8;
+  }
+</style>
