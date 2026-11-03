@@ -67,6 +67,7 @@ jobs:
     runs-on: ${{ needs.start-runner.outputs.label }}
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
