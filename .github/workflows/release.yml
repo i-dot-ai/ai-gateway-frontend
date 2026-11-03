@@ -1,45 +1,108 @@
-# Build and publish the frontend image to GitHub Container Registry (GHCR)
+# Build and publish the frontend image to AWS ECR (core-llm-gateway-frontend)
 # when a GitHub Release is published.
 #
-# The image is tagged from the release version:
-#   {{version}}        e.g. 1.2.3
+# This mirrors the i.AI deployment pattern used by core-llm-gateway and minute:
+# the build runs on an org EC2 runner started via the shared start-runner
+# workflow, authenticates to AWS by OIDC, and pushes to ECR. The image is tagged
+# from the release version:
+#   {{version}}         e.g. 1.2.3
 #   {{major}}.{{minor}} e.g. 1.2
 #   {{major}}           e.g. 1
 #   sha-<short>         the exact commit (for pinning)
 #   latest              stable releases only (never prereleases)
 #
-# The package is public, so core-llm-gateway's ECS can pull it without creds.
+# Required org secrets: AWS_GITHUBRUNNER_PAT, AWS_REGION, AWS_ACCOUNT_ID.
+# The OIDC role
+#   arn:aws:iam::<AWS_ACCOUNT_ID>:role/infra/i-dot-ai-prod-<APP_NAME>-ci-deployment-role
+# must exist and trust this repository, and be allowed to push to the
+# core-llm-gateway-frontend ECR repository.
 name: release
 
 on:
   release:
     types: [published]
 
+env:
+  ECR_REPO_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/core-llm-gateway-frontend
+
 jobs:
-  build-push:
+  set-vars:
     runs-on: ubuntu-latest
+    outputs:
+      app-name: ${{ steps.export.outputs.app-name }}
+      ec2-instance-type: ${{ steps.export.outputs.ec2-instance-type }}
+      runner-size: ${{ steps.export.outputs.runner-size }}
+      docker-build-instance: ${{ steps.export.outputs.docker-build-instance }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - id: export
+        run: |
+          . ./.github/.github.env
+          echo "app-name=${APP_NAME}" >> $GITHUB_OUTPUT
+          echo "ec2-instance-type=${EC2_INSTANCE_TYPE}" >> $GITHUB_OUTPUT
+          echo "runner-size=${RUNNER_SIZE}" >> $GITHUB_OUTPUT
+          echo "docker-build-instance=${DOCKER_BUILD_INSTANCE}" >> $GITHUB_OUTPUT
+
+  start-runner:
+    uses: i-dot-ai/i-dot-ai-core-github-actions/.github/workflows/start-runner.yml@main
+    needs: set-vars
+    permissions: write-all
+    with:
+      APP_NAME: ${{ needs.set-vars.outputs.app-name }}
+      EC2_INSTANCE_TYPE: ${{ needs.set-vars.outputs.ec2-instance-type }}
+      RUNNER_SIZE: ${{ needs.set-vars.outputs.runner-size }}
+      USE_OIDC: true
+    secrets:
+      AWS_GITHUBRUNNER_PAT: ${{ secrets.AWS_GITHUBRUNNER_PAT }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+  build-push:
+    needs:
+      - set-vars
+      - start-runner
+    runs-on: ${{ needs.start-runner.outputs.label }}
     permissions:
       contents: read
-      packages: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - name: AWS Authentication
+        uses: i-dot-ai/i-dot-ai-core-github-actions/.github/actions/authenticate-aws@main
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          APP_NAME: ${{ needs.set-vars.outputs.app-name }}
+          USE_OIDC: true
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+      - name: Log in to Amazon ECR
+        run: aws ecr get-login-password --region "${{ secrets.AWS_REGION }}" | docker login --username AWS --password-stdin "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com"
+
+      - name: Create Docker cache container
+        env:
+          INSTANCE_NAME: ${{ needs.set-vars.outputs.docker-build-instance }}
+        run: |
+          if docker buildx ls --format "{{.Name}}" | grep -w "${INSTANCE_NAME}"; then
+            echo "Instance ${INSTANCE_NAME} found."
+          else
+            docker buildx create --name "${INSTANCE_NAME}" --driver docker-container
+          fi
+
+      - name: Export EFS cache path
+        uses: i-dot-ai/i-dot-ai-core-github-actions/.github/actions/export-parameter@main
+        with:
+          PARAMETER_STORE_VAR_NAME: /github-runner-prod/efs-mount-path
+          ENVIRONMENT_VAR_NAME: EFS_MOUNT_PATH
 
       - name: Derive image tags
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.ECR_REPO_URL }}
           flavor: |
             latest=false
           tags: |
@@ -54,8 +117,28 @@ jobs:
         with:
           context: .
           file: Dockerfile
+          builder: ${{ needs.set-vars.outputs.docker-build-instance }}
+          platforms: linux/amd64
           push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=local,src=${{ env.EFS_MOUNT_PATH }}
+          cache-to: type=local,dest=${{ env.EFS_MOUNT_PATH }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  stop-runner:
+    needs:
+      - set-vars
+      - start-runner
+      - build-push
+    if: needs.start-runner.outputs.use-persisted == 0 && always()
+    permissions: write-all
+    uses: i-dot-ai/i-dot-ai-core-github-actions/.github/workflows/stop-runner.yml@main
+    with:
+      APP_NAME: ${{ needs.set-vars.outputs.app-name }}
+      RUNNER_LABEL: ${{ needs.start-runner.outputs.label }}
+      EC2_INSTANCE_ID: ${{ needs.start-runner.outputs.ec2-instance-id }}
+      USE_OIDC: true
+    secrets:
+      AWS_GITHUBRUNNER_PAT: ${{ secrets.AWS_GITHUBRUNNER_PAT }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
