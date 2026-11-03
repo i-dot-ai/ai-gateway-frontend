@@ -11,7 +11,7 @@ model_list:
   - model_name: claude-opus-4-6
     litellm_params:
       model: anthropic/claude-opus-4-6
-      api_key: os.environ/ANTHROPIC_API_KEY
+      api_key: os.environ/ANTHROPIC_API_KEY  # pragma: allowlist secret
       mock_response: "Mock reply from the local LiteLLM instance."
     model_info:
       id: claude-opus-4-6
@@ -35,7 +35,7 @@ model_list:
   - model_name: claude-sonnet-4-6
     litellm_params:
       model: anthropic/claude-sonnet-4-6
-      api_key: os.environ/ANTHROPIC_API_KEY
+      api_key: os.environ/ANTHROPIC_API_KEY  # pragma: allowlist secret
       mock_response: "Mock reply from the local LiteLLM instance."
     model_info:
       id: claude-sonnet-4-6
@@ -59,7 +59,7 @@ model_list:
   - model_name: gpt-4o
     litellm_params:
       model: openai/gpt-4o
-      api_key: os.environ/OPENAI_API_KEY
+      api_key: os.environ/OPENAI_API_KEY  # pragma: allowlist secret
       mock_response: "Mock reply from the local LiteLLM instance."
     model_info:
       id: gpt-4o
@@ -83,7 +83,7 @@ model_list:
   - model_name: titan-embed-text
     litellm_params:
       model: openai/text-embedding-3-small
-      api_key: os.environ/OPENAI_API_KEY
+      api_key: os.environ/OPENAI_API_KEY  # pragma: allowlist secret
     model_info:
       id: titan-embed-text
       litellm_provider: openai
