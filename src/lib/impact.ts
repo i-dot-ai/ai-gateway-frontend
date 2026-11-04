@@ -236,6 +236,30 @@ export interface DailyImpact extends ImpactEstimate {
 	totalTokens: number;
 }
 
+/**
+ * One cost row's estimate, or null when its model has no estimate or it
+ * produced no output. Only successful requests count as generations.
+ */
+export function estimateRow(c: LitellmCost, index: ImpactIndex): ImpactEstimate | null {
+	const res = index.get(c.model_name);
+	if (!res?.ok || c.completion_tokens <= 0) return null;
+	const { gwpKg, energyKwh } = estimateImpact(res.model, c.completion_tokens, Math.max(1, c.api_requests - c.failed_requests));
+	return { gwpKg, energyKwh };
+}
+
+/** Totals over already-estimated rows, so a caller that keeps per-row estimates doesn't estimate twice. */
+export function totalImpact(rows: Iterable<readonly [LitellmCost, ImpactEstimate | null]>): Omit<DailyImpact, "date"> {
+	let t: Omit<DailyImpact, "date"> = { ...ZERO_ESTIMATE, estimatedTokens: 0, totalTokens: 0 };
+	for (const [c, e] of rows) {
+		t = {
+			...addEstimate(t, e ?? ZERO_ESTIMATE),
+			totalTokens: t.totalTokens + c.completion_tokens,
+			estimatedTokens: t.estimatedTokens + (e ? c.completion_tokens : 0),
+		};
+	}
+	return t;
+}
+
 const zeroDay = (date: string): DailyImpact => ({ ...ZERO_ESTIMATE, date, estimatedTokens: 0, totalTokens: 0 });
 
 /**
@@ -250,11 +274,10 @@ export function impactPerDay(costs: ReadonlyArray<LitellmCost>, index: ImpactInd
 	for (const c of costs) {
 		const day = byDate.get(c.date);
 		if (!day) continue;
-		const res = index.get(c.model_name);
-		const estimated = res?.ok && c.completion_tokens > 0;
-		const e = estimated ? estimateImpact(res.model, c.completion_tokens, Math.max(1, c.api_requests - c.failed_requests)) : ZERO_ESTIMATE;
+		const e = estimateRow(c, index);
+		const estimated = e !== null;
 		byDate.set(c.date, {
-			...addEstimate(day, e),
+			...addEstimate(day, e ?? ZERO_ESTIMATE),
 			date: day.date,
 			totalTokens: day.totalTokens + c.completion_tokens,
 			estimatedTokens: day.estimatedTokens + (estimated ? c.completion_tokens : 0),
@@ -310,34 +333,35 @@ const num = (n: number, digits: number) => n.toLocaleString("en-GB", { maximumFr
 
 /**
  * A formatter that picks the largest unit the value reaches. `steps` run from
- * the largest unit down, each as [threshold in the base unit, label, decimals];
- * the last step is the floor.
+ * the largest unit down, each as [threshold in the base unit, label, decimals,
+ * decimals below 10 of that unit]; the last step is the floor.
  */
-function scaled(steps: ReadonlyArray<[threshold: number, unit: string, digits: number]>): (value: number) => string {
+function scaled(steps: ReadonlyArray<[threshold: number, unit: string, digits: number, smallDigits?: number]>): (value: number) => string {
 	return (value) => {
-		const [threshold, unit, digits] = steps.find(([t]) => value >= t) ?? steps[steps.length - 1];
-		return `${num(value / threshold, digits)} ${unit}`;
+		const [threshold, unit, digits, smallDigits = digits] = steps.find(([t]) => value >= t) ?? steps[steps.length - 1];
+		const n = value / threshold;
+		return `${num(n, n < 10 ? smallDigits : digits)} ${unit}`;
 	};
 }
 
-/** Kilograms of CO2e as tonnes, kilograms or grams. */
+/** Kilograms of CO2e as tonnes, kilograms or grams. One decimal under 10 g, so light personal use doesn't read as zero. */
 export const formatCo2 = scaled([
 	[1_000, "t CO₂e", 2],
 	[1, "kg CO₂e", 1],
-	[0.001, "g CO₂e", 0],
+	[0.001, "g CO₂e", 0, 1],
 ]);
 
-/** Kilowatt hours as MWh, kWh or Wh. */
+/** Kilowatt hours as MWh, kWh or Wh. One decimal under 10 Wh. */
 export const formatEnergy = scaled([
 	[1_000, "MWh", 2],
 	[1, "kWh", 1],
-	[0.001, "Wh", 0],
+	[0.001, "Wh", 0, 1],
 ]);
 
-/** Litres, or millilitres below one. */
+/** Litres, or millilitres below one. One decimal under 10 mL. */
 export const formatWater = scaled([
 	[1, "L", 1],
-	[0.001, "mL", 0],
+	[0.001, "mL", 0, 1],
 ]);
 
 /** "235B total, 22B active" or "123B". */
