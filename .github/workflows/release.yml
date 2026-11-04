@@ -1,5 +1,7 @@
 # Build and publish the frontend image to AWS ECR (ai-gateway-frontend)
-# when a GitHub Release is published.
+# when a GitHub Release is published, or when dispatched with a version: the
+# dispatched run creates the release at the dispatched commit, then builds it
+# (one run, so automation only needs permission to dispatch this workflow).
 #
 # This mirrors the i.AI deployment pattern used by core-llm-gateway and minute:
 # the build runs on an org EC2 runner started via the shared start-runner
@@ -21,11 +23,43 @@ name: release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to create, e.g. v1.2.3"
+        required: true
+        type: string
 
 env:
   ECR_REPO_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/ai-gateway-frontend
+  VERSION: ${{ inputs.version || github.event.release.tag_name }}
 
 jobs:
+  # Dispatched runs only. A release made with GITHUB_TOKEN doesn't start
+  # another run of this workflow, so the build below is the only one.
+  create-release:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Releases are cut from main; dispatched from $GITHUB_REF"
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must look like v1.2.3, got '$VERSION'"
+            exit 1
+          fi
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::$VERSION already exists"
+            exit 1
+          fi
+          gh release create "$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --generate-notes
+
   set-vars:
     runs-on: ubuntu-latest
     outputs:
@@ -48,7 +82,11 @@ jobs:
 
   start-runner:
     uses: i-dot-ai/i-dot-ai-core-github-actions/.github/workflows/start-runner.yml@main
-    needs: set-vars
+    needs:
+      - set-vars
+      - create-release
+    # create-release is skipped on release events; only a failure stops here.
+    if: ${{ !failure() && !cancelled() }}
     permissions: write-all
     with:
       APP_NAME: ${{ needs.set-vars.outputs.app-name }}
@@ -64,6 +102,7 @@ jobs:
     needs:
       - set-vars
       - start-runner
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ${{ needs.start-runner.outputs.label }}
     permissions:
       contents: read
@@ -106,12 +145,13 @@ jobs:
           images: ${{ env.ECR_REPO_URL }}
           flavor: |
             latest=false
+          # value= so dispatched runs (ref is main, not the tag) get version tags too.
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}},value=${{ env.VERSION }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.VERSION }}
+            type=semver,pattern={{major}},value=${{ env.VERSION }}
             type=sha,format=long
-            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' || !github.event.release.prerelease }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
