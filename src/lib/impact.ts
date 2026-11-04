@@ -358,10 +358,10 @@ export const formatEnergy = scaled([
 	[0.001, "Wh", 0, 1],
 ]);
 
-/** Litres, or millilitres below one. */
+/** Litres, or millilitres below one. One decimal under 10 mL. */
 export const formatWater = scaled([
 	[1, "L", 1],
-	[0.001, "mL", 0],
+	[0.001, "mL", 0, 1],
 ]);
 
 /** "235B total, 22B active" or "123B". */

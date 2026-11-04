@@ -341,6 +341,9 @@ describe('impact', () => {
 			expect(formatEnergy(2000)).toBe('2 MWh');
 			expect(formatWater(0.5)).toBe('500 mL');
 			expect(formatWater(3)).toBe('3 L');
+			// Sub-millilitre figures keep a decimal rather than reading as "0 mL".
+			expect(formatWater(0.0004)).toBe('0.4 mL');
+			expect(formatWater(0.005)).toBe('5 mL');
 		});
 
 		it('shares the unit across a range, or spells both out when they differ', () => {
