@@ -10,15 +10,8 @@ import {
   Input,
   Button,
 } from "@i-dot-ai-npm/component-library-solid";
+import { readAndClearFlash } from "../../../lib/flash";
 import { KEY_ALIAS_PATTERN } from "../../../lib/litellmKeys";
-
-async function readAndClearFlash(key: string): Promise<string | undefined> {
-  const value = await Astro.session?.get(key);
-  if (value) {
-    Astro.session?.delete(key);
-  }
-  return value || undefined;
-}
 
 if (Astro.request.method === "POST") {
   const email = await Astro.session?.get("user-email");
@@ -44,7 +37,10 @@ if (Astro.request.method === "POST") {
   return Astro.redirect("/keys/generate/confirm", 303);
 }
 
-const keyNameError = await readAndClearFlash("flash-key-name-error");
+const keyNameError = await readAndClearFlash(
+  Astro.session,
+  "flash-key-name-error",
+);
 ---
 
 <GovukLayout title="Create a personal key">

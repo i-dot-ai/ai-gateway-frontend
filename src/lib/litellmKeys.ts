@@ -2,7 +2,8 @@
  * Client for LiteLLM's virtual-key admin API - mirrors
  * slack-app/litellm_user_management.py's endpoints and behaviour.
  */
-import { apiUrl, getLitellmConfig, getTeams, logger, REQUEST_TIMEOUT_MS, unknownErrorMessage } from './litellm';
+import { getTeams, litellmFetch } from './litellm';
+import { logger } from './logging';
 import type { LitellmTeamList } from './litellm';
 
 export const KEY_ALIAS_PATTERN = /^[a-zA-Z]+(?:[-_]+[a-zA-Z0-9]+)*$/;
@@ -73,25 +74,11 @@ export interface DeleteKeyResult {
 
 /** The LiteLLM user id for this email, or undefined if there is no such user. Never creates one. */
 export async function getUserId(email: string): Promise<ResolveUserResult> {
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) return { error: configError };
+	const { body, error } = await litellmFetch('/user/list', { params: { user_email: email }, log: { email } });
+	if (error !== undefined) return { error };
 
-	try {
-		const response = await fetch(apiUrl(config, '/user/list', { user_email: email }), {
-			headers: { Authorization: `Bearer ${config.apiKey}` },
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		});
-		const body = await response.json().catch(() => null);
-		if (!response.ok) {
-			return { error: `LiteLLM returned ${response.status}` };
-		}
-
-		const userId = body?.users?.[0]?.user_id;
-		return { userId: typeof userId === 'string' ? userId : undefined };
-	} catch (e) {
-		logger.error({ err: e, email }, 'Unknown error contacting LiteLLM');
-		return { error: unknownErrorMessage(e) };
-	}
+	const userId = body?.users?.[0]?.user_id;
+	return { userId: typeof userId === 'string' ? userId : undefined };
 }
 
 /**
@@ -105,37 +92,24 @@ export async function getOrCreateUserId(email: string): Promise<ResolveUserResul
 		return existing;
 	}
 
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) return { error: configError };
+	const { body, error } = await litellmFetch('/user/new', {
+		json: {
+			user_email: email,
+			username: email,
+			user_role: 'internal_user',
+			auto_create_key: false,
+			tpm_limit: DEFAULT_USER_TPM_LIMIT,
+			rpm_limit: DEFAULT_USER_RPM_LIMIT,
+			max_budget: DEFAULT_USER_MAX_BUDGET,
+			budget_duration: DEFAULT_USER_BUDGET_DURATION,
+		},
+		expect: (b) => typeof b?.user_id === 'string',
+		log: { email },
+	});
+	if (error !== undefined) return { error };
 
-	try {
-		const response = await fetch(apiUrl(config, '/user/new'), {
-			method: 'POST',
-			headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				user_email: email,
-				username: email,
-				user_role: 'internal_user',
-				auto_create_key: false,
-				tpm_limit: DEFAULT_USER_TPM_LIMIT,
-				rpm_limit: DEFAULT_USER_RPM_LIMIT,
-				max_budget: DEFAULT_USER_MAX_BUDGET,
-				budget_duration: DEFAULT_USER_BUDGET_DURATION,
-			}),
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		});
-		const body = await response.json().catch(() => null);
-		if (!response.ok || typeof body?.user_id !== 'string') {
-			logger.error({ status: response.status, email }, 'Failed to create LiteLLM user');
-			return { error: `LiteLLM returned ${response.status}` };
-		}
-
-		logger.info({ email, userId: body.user_id }, 'Created LiteLLM user');
-		return { userId: body.user_id };
-	} catch (e) {
-		logger.error({ err: e, email }, 'Unknown error contacting LiteLLM');
-		return { error: unknownErrorMessage(e) };
-	}
+	logger.info({ email, userId: body.user_id }, 'Created LiteLLM user');
+	return { userId: body.user_id };
 }
 
 /**
@@ -146,59 +120,31 @@ export async function getOrCreateUserId(email: string): Promise<ResolveUserResul
  * so setting it on every key regen would stop the budget ever resetting.
  */
 export async function ensureUserLimits(userId: string): Promise<{ ok: boolean; error?: string }> {
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) return { ok: false, error: configError };
-
-	try {
-		const response = await fetch(apiUrl(config, '/user/update'), {
-			method: 'POST',
-			headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				user_id: userId,
-				tpm_limit: DEFAULT_USER_TPM_LIMIT,
-				rpm_limit: DEFAULT_USER_RPM_LIMIT,
-			}),
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		});
-		if (!response.ok) {
-			logger.error({ status: response.status, userId }, 'Failed to update LiteLLM user limits');
-			return { ok: false, error: `LiteLLM returned ${response.status}` };
-		}
-		return { ok: true };
-	} catch (e) {
-		logger.error({ err: e, userId }, 'Unknown error contacting LiteLLM');
-		return { ok: false, error: unknownErrorMessage(e) };
-	}
+	const { error } = await litellmFetch('/user/update', {
+		json: { user_id: userId, tpm_limit: DEFAULT_USER_TPM_LIMIT, rpm_limit: DEFAULT_USER_RPM_LIMIT },
+		log: { userId },
+	});
+	return error === undefined ? { ok: true } : { ok: false, error };
 }
 
 /** Every key this user holds. /user/info returns each key in full, expiry included. */
 export async function getUserKeys(userId: string): Promise<LitellmUserKeysResult> {
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) return { keys: [], error: configError };
+	const { body, error } = await litellmFetch('/user/info', {
+		params: { user_id: userId },
+		expect: (b) => Array.isArray(b?.keys),
+		log: { userId },
+	});
+	if (error !== undefined) return { keys: [], error };
 
-	try {
-		const response = await fetch(apiUrl(config, '/user/info', { user_id: userId }), {
-			headers: { Authorization: `Bearer ${config.apiKey}` },
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		});
-		const body = await response.json().catch(() => null);
-		if (!response.ok || !Array.isArray(body?.keys)) {
-			return { keys: [], error: `LiteLLM returned ${response.status}` };
-		}
-
-		return {
-			keys: body.keys.map((key: any) => ({
-				token: key.token,
-				alias: key.key_alias ?? 'unknown',
-				expires: key.expires ?? undefined,
-				teamId: key.team_id ?? undefined,
-			})),
-			budget: parseUserBudget(body.user_info),
-		};
-	} catch (e) {
-		logger.error({ err: e, userId }, 'Unknown error contacting LiteLLM');
-		return { keys: [], error: unknownErrorMessage(e) };
-	}
+	return {
+		keys: body.keys.map((key: any) => ({
+			token: key.token,
+			alias: key.key_alias ?? 'unknown',
+			expires: key.expires ?? undefined,
+			teamId: key.team_id ?? undefined,
+		})),
+		budget: parseUserBudget(body.user_info),
+	};
 }
 
 /** Pulls the user-level budget/limits out of /user/info's user_info block, or undefined if absent. */
@@ -244,9 +190,6 @@ export async function getPersonalTeamId(): Promise<ResolveTeamResult> {
  * user level.
  */
 export async function generateKey(params: { userId: string; alias: string; teamId?: string }): Promise<GenerateKeyResult> {
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) return { error: configError };
-
 	let teamId = params.teamId;
 	if (!teamId) {
 		const { teamId: personalTeamId, error: teamError } = await getPersonalTeamId();
@@ -254,61 +197,29 @@ export async function generateKey(params: { userId: string; alias: string; teamI
 		teamId = personalTeamId;
 	}
 
-	try {
-		const response = await fetch(apiUrl(config, '/key/generate'), {
-			method: 'POST',
-			headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				// Hardcoded, matching the Slack app - revisit once teams/policies are designed.
-				models: ['all-team-models'],
-				user_id: params.userId,
-				duration: DEFAULT_KEY_DURATION,
-				key_alias: params.alias,
-				team_id: teamId,
-			}),
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		});
-		const body = await response.json().catch(() => null);
-		if (!response.ok || typeof body?.key !== 'string') {
-			logger.error({ status: response.status, alias: params.alias }, 'Failed to generate LiteLLM key');
-			return { error: `LiteLLM returned ${response.status}` };
-		}
+	const { body, error } = await litellmFetch('/key/generate', {
+		json: {
+			// Hardcoded, matching the Slack app - revisit once teams/policies are designed.
+			models: ['all-team-models'],
+			user_id: params.userId,
+			duration: DEFAULT_KEY_DURATION,
+			key_alias: params.alias,
+			team_id: teamId,
+		},
+		expect: (b) => typeof b?.key === 'string',
+		log: { alias: params.alias },
+	});
+	if (error !== undefined) return { error };
 
-		logger.info({ alias: params.alias, userId: params.userId }, 'Generated LiteLLM key');
-		return { key: body.key, alias: params.alias };
-	} catch (e) {
-		logger.error({ err: e, alias: params.alias }, 'Unknown error contacting LiteLLM');
-		return { error: unknownErrorMessage(e) };
-	}
+	logger.info({ alias: params.alias, userId: params.userId }, 'Generated LiteLLM key');
+	return { key: body.key, alias: params.alias };
 }
 
 export async function deleteKey(token: string): Promise<DeleteKeyResult> {
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) return { ok: false, error: configError };
-
-	try {
-		const response = await fetch(apiUrl(config, '/key/delete'), {
-			method: 'POST',
-			headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-			body: JSON.stringify({ keys: [token] }),
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		});
-
-		if (!response.ok) {
-			// Already gone (e.g. a double-submit) is the desired end state - treat as success.
-			if (response.status === 404) {
-				logger.info({ token }, 'Key already deleted');
-				return { ok: true };
-			}
-			logger.error({ status: response.status }, 'Failed to delete LiteLLM key');
-			return { ok: false, error: `LiteLLM returned ${response.status}` };
-		}
-
-		return { ok: true };
-	} catch (e) {
-		logger.error({ err: e }, 'Unknown error contacting LiteLLM');
-		return { ok: false, error: unknownErrorMessage(e) };
-	}
+	// Already gone (e.g. a double-submit) is the desired end state - treat as success.
+	const { status, error } = await litellmFetch('/key/delete', { json: { keys: [token] }, tolerate: 404 });
+	if (status === 404) logger.info({ token }, 'Key already deleted');
+	return error === undefined ? { ok: true } : { ok: false, error };
 }
 
 /** The fixed three-segment alias shape: `{team-or-personal}/{email}/{description}`. */

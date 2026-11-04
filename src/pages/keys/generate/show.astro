@@ -1,21 +1,19 @@
 ---
 import GovukLayout from "../../../layouts/GovukLayout.astro";
+import { readAndClearFlash } from "../../../lib/flash";
 import CopyableCode from "../../../components/CopyableCode.astro";
 import { WarningText } from "@i-dot-ai-npm/component-library-solid";
 
-async function readAndClearFlash(key: string): Promise<string | undefined> {
-  const value = await Astro.session?.get(key);
-  if (value) {
-    Astro.session?.delete(key);
-  }
-  return value || undefined;
-}
-
-const generatedKey = await readAndClearFlash("flash-generated-key");
+const generatedKey = await readAndClearFlash(
+  Astro.session,
+  "flash-generated-key",
+);
 const isReplacement =
-  (await readAndClearFlash("flash-generated-key-replaced")) === "true";
-const generatedKeyAlias = await readAndClearFlash("flash-generated-key-alias");
-const generatedKeyTeam = await readAndClearFlash("flash-generated-key-team");
+  (await readAndClearFlash(Astro.session, "flash-generated-key-replaced")) ===
+  "true";
+const replacementUndeleted =
+  (await readAndClearFlash(Astro.session, "flash-generated-key-undeleted")) ===
+  "true";
 
 // The flash is read-and-cleared, so this is what actually enforces
 // "shown once": a direct visit, refresh, or back-button lands here empty.
@@ -42,6 +40,14 @@ const pageTitle = "Your Gateway key has been created";
     <WarningText>
       This key replaces your previous one, which has been deleted. You must
       update this key in any tools that were using it.
+    </WarningText>
+  )}
+
+  {replacementUndeleted && (
+    <WarningText>
+      This key replaces your previous one, but we could not delete the previous
+      key. It may still be active - delete it from your keys list, especially if
+      you are replacing it because it was exposed.
     </WarningText>
   )}
 

@@ -14,19 +14,12 @@ import {
   SummaryListValue,
   SummaryListActions,
 } from "@i-dot-ai-npm/component-library-solid";
+import { readAndClearFlash } from "../../../lib/flash";
 import {
   buildKeyAlias,
   getUserId,
   getUserKeys,
 } from "../../../lib/litellmKeys";
-
-async function readAndClearFlash(key: string): Promise<string | undefined> {
-  const value = await Astro.session?.get(key);
-  if (value) {
-    Astro.session?.delete(key);
-  }
-  return value || undefined;
-}
 
 const email = (await Astro.session?.get("user-email")) ?? null;
 const keyName = await Astro.session?.get("pending-key-name");
@@ -44,7 +37,7 @@ const isTeamKey = teamId && teamName;
 const pageTitle = "Check your key's name identifies what it will be used for";
 const backLink = isTeamKey ? "/keys/generate/team" : "/keys/generate/personal";
 
-const flashError = await readAndClearFlash("flash-error");
+const flashError = await readAndClearFlash(Astro.session, "flash-error");
 
 const alias = buildKeyAlias(email, keyName, teamName);
 
