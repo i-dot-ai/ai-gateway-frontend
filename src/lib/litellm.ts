@@ -803,10 +803,60 @@ const getModelCostsCached = cachedKeyedFetcher(
 	},
 );
 
+// Jev is a pass-through model, so its spend is logged under the versioned name
+// TypeSafe reports ("typesafe/jev-1.13.0"), never the "jev-latest" alias, so the
+// exact-name lookup above misses it. Match the whole typesafe namespace instead.
+const JEV_MODEL_GROUP_PREFIX = "typesafe/";
+
+const getJevCostsCached = cachedKeyedFetcher(
+	PLATFORM_COSTS_CACHE_TTL_MS,
+	(key: string): Promise<{ costs: LitellmCost[]; error?: string }> => {
+		const [startDate, endDate] = key.split("|");
+		return fetchAggregatedGroupCosts(startDate, endDate, (name) => name.startsWith(JEV_MODEL_GROUP_PREFIX));
+	},
+);
+
+/**
+ * Everyone's Jev usage across the gateway, for the /models/jev page. Same
+ * aggregation and team-name join as getModelCosts; the only difference is that
+ * it matches Jev's `typesafe/jev-*` spend rows rather than one exact name.
+ */
+export async function getJevCosts(
+	startDate: string,
+	endDate: string,
+): Promise<{ costs: LitellmCost[]; error?: string }> {
+	const [result, teamsResult] = await Promise.all([
+		getJevCostsCached(`${startDate}|${endDate}`),
+		fetchTeamsCached(),
+	]);
+	if (result.error !== undefined) {
+		return { costs: [], error: result.error };
+	}
+	const teamNamesById = new Map(teamsResult.teams.map((t) => [t.id, t.name]));
+	const costs = result.costs.map((c) => ({
+		...c,
+		team_name: c.team_id ? teamNamesById.get(c.team_id) ?? c.team_id : "",
+	}));
+	return { costs };
+}
+
 async function fetchModelCosts(
 	modelName: string,
 	startDate: string,
 	endDate: string,
+): Promise<{ costs: LitellmCost[]; error?: string }> {
+	return fetchAggregatedGroupCosts(startDate, endDate, (name) => name === modelName);
+}
+
+/**
+ * Per-key spend/token rows for every `model_groups` entry whose name `matches`,
+ * over a date range. Shared by getModelCosts (one exact name) and getJevCosts (a
+ * prefix). The scan is platform-wide, so callers cache it like the cost blocks.
+ */
+async function fetchAggregatedGroupCosts(
+	startDate: string,
+	endDate: string,
+	matches: (modelName: string) => boolean,
 ): Promise<{ costs: LitellmCost[]; error?: string }> {
 	const { config, error: configError } = getLitellmConfig();
 	if (!config) {
@@ -833,32 +883,32 @@ async function fetchModelCosts(
 		const costs: LitellmCost[] = [];
 
 		for (const result of body.results) {
-			const date = result.date;
-			const modelGroup = result.breakdown?.model_groups?.[modelName];
-			if (!modelGroup) continue;
+			for (const [modelName, modelGroup] of Object.entries(result.breakdown?.model_groups ?? {}) as Array<[string, any]>) {
+				if (!matches(modelName)) continue;
 
-			// Extract per-key breakdown from api_key_breakdown
-			for (const [token, subValue] of Object.entries(modelGroup.api_key_breakdown || {}) as Array<[string, any]>) {
-				// Skip health-check key - it polls every model every 5 minutes
-				if (token === "litellm-internal-health-check") continue;
+				// Extract per-key breakdown from api_key_breakdown
+				for (const [token, subValue] of Object.entries(modelGroup.api_key_breakdown || {}) as Array<[string, any]>) {
+					// Skip health-check key - it polls every model every 5 minutes
+					if (token === "litellm-internal-health-check") continue;
 
-				costs.push({
-					date,
-					model_name: modelName,
-					spend: subValue.metrics.spend,
-					total_tokens: subValue.metrics.total_tokens,
-					prompt_tokens: subValue.metrics.prompt_tokens ?? 0,
-					completion_tokens: subValue.metrics.completion_tokens ?? 0,
-					cache_read_input_tokens: subValue.metrics.cache_read_input_tokens ?? 0,
-					cache_creation_input_tokens: subValue.metrics.cache_creation_input_tokens ?? 0,
-					api_requests: subValue.metrics.api_requests ?? 0,
-					failed_requests: subValue.metrics.failed_requests ?? 0,
-					key_alias: subValue.metadata.key_alias ?? "",
-					key_token: token,
-					team_id: subValue.metadata.team_id ?? "",
-					user_id: null,
-					team_name: "",
-				});
+					costs.push({
+						date: result.date,
+						model_name: modelName,
+						spend: subValue.metrics.spend,
+						total_tokens: subValue.metrics.total_tokens,
+						prompt_tokens: subValue.metrics.prompt_tokens ?? 0,
+						completion_tokens: subValue.metrics.completion_tokens ?? 0,
+						cache_read_input_tokens: subValue.metrics.cache_read_input_tokens ?? 0,
+						cache_creation_input_tokens: subValue.metrics.cache_creation_input_tokens ?? 0,
+						api_requests: subValue.metrics.api_requests ?? 0,
+						failed_requests: subValue.metrics.failed_requests ?? 0,
+						key_alias: subValue.metadata.key_alias ?? "",
+						key_token: token,
+						team_id: subValue.metadata.team_id ?? "",
+						user_id: null,
+						team_name: "",
+					});
+				}
 			}
 		}
 
