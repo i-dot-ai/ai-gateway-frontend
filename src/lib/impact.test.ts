@@ -6,6 +6,7 @@ import {
 	coveragePct,
 	deriveImpactZone,
 	estimateImpact,
+	estimateRow,
 	formatCo2,
 	formatEnergy,
 	formatParameters,
@@ -16,6 +17,7 @@ import {
 	rangeMid,
 	resolveImpactModel,
 	sumImpact,
+	totalImpact,
 	unresolvedLabel,
 	zoneLabel,
 } from './impact';
@@ -215,6 +217,55 @@ describe('impact', () => {
 		});
 	});
 
+	describe('estimateRow', () => {
+		const index = buildImpactIndex([
+			model(),
+			model({ id: 'id-2', name: 'bedrock-qwen3-vl-uk', litellm_model: 'bedrock/qwen.qwen3-vl-235b-a22b', impact_model: undefined, location: 'UK' }),
+		]);
+		const opus = resolved(model());
+
+		it('estimates a row from its successful requests', () => {
+			const e = estimateRow(cost({ completion_tokens: 1000, api_requests: 5, failed_requests: 3 }), index);
+			const expected = estimateImpact(opus, 1000, 2);
+			expect(e).toEqual({ gwpKg: expected.gwpKg, energyKwh: expected.energyKwh });
+		});
+
+		it('is null for an unresolved model, an unknown alias or a row with no output', () => {
+			expect(estimateRow(cost({ model_name: 'bedrock-qwen3-vl-uk' }), index)).toBeNull();
+			expect(estimateRow(cost({ model_name: 'no-such-alias' }), index)).toBeNull();
+			expect(estimateRow(cost({ completion_tokens: 0 }), index)).toBeNull();
+		});
+
+	});
+
+	describe('totalImpact', () => {
+		const index = buildImpactIndex([
+			model(),
+			model({ id: 'id-2', name: 'bedrock-qwen3-vl-uk', litellm_model: 'bedrock/qwen.qwen3-vl-235b-a22b', impact_model: undefined, location: 'UK' }),
+		]);
+		const opus = resolved(model());
+
+		it('sums estimated rows and counts unestimated output towards coverage', () => {
+			const costs = [
+				cost({ completion_tokens: 1000 }),
+				cost({ completion_tokens: 400, api_requests: 3 }),
+				cost({ model_name: 'bedrock-qwen3-vl-uk', completion_tokens: 600 }),
+			];
+			const t = totalImpact(costs.map((c) => [c, estimateRow(c, index)] as const));
+			const expected = estimateImpact(opus, 1000, 1).gwpKg.max + estimateImpact(opus, 400, 3).gwpKg.max;
+			expect(t.gwpKg.max).toBeCloseTo(expected, 12);
+			expect(t.estimatedTokens).toBe(1400);
+			expect(t.totalTokens).toBe(2000);
+			expect(coveragePct(t)).toBe(70);
+		});
+
+		it('is zero with full coverage for no rows', () => {
+			const t = totalImpact([]);
+			expect(t.gwpKg).toEqual({ min: 0, max: 0 });
+			expect(coveragePct(t)).toBe(100);
+		});
+	});
+
 	describe('buildImpactIndex', () => {
 		it('answers for the alias, the full LiteLLM id and the id without its route, as cost rows carry any of them', () => {
 			// LiteLLM's daily activity keys models by the underlying id ("eu.anthropic.claude-opus-4-7"), not the alias.
@@ -279,6 +330,10 @@ describe('impact', () => {
 	describe('formatting', () => {
 		it('picks a unit by size', () => {
 			expect(formatCo2(0.0123)).toBe('12 g CO₂e');
+			// Light personal use keeps a decimal rather than reading as zero.
+			expect(formatCo2(0.0004)).toBe('0.4 g CO₂e');
+			expect(formatCo2(0.0042)).toBe('4.2 g CO₂e');
+			expect(formatEnergy(0.0008)).toBe('0.8 Wh');
 			expect(formatCo2(2.5)).toBe('2.5 kg CO₂e');
 			expect(formatCo2(1500)).toBe('1.5 t CO₂e');
 			expect(formatEnergy(0.25)).toBe('250 Wh');

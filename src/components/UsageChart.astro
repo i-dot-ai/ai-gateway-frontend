@@ -22,7 +22,7 @@ export interface Props {
   colors: string[];
   yLabel: string;
   /** How to format axis ticks and tooltip values. */
-  valueFormat: "count" | "spend" | "tokens";
+  valueFormat: "count" | "spend" | "tokens" | "carbon";
   /** Accessible description of the chart. */
   caption: string;
 }
@@ -103,13 +103,17 @@ const data = JSON.stringify({
 
     // Spend keeps Chart.js's own $ scale; token/count scales are pinned to a
     // whole-unit max and step (via the tallest stacked bar) so ticks stay decimal-free.
+    // Carbon under 5 g also keeps Chart.js's scale, so sub-gram days get fractional ticks.
     const stackedMax = Math.max(
       0,
       ...labels.map((_, i) =>
         datasets.reduce((sum, d) => sum + (d.data[i] ?? 0), 0),
       ),
     );
-    const axis = format === "spend" ? null : compactAxis(stackedMax);
+    const axis =
+      format === "spend" || (format === "carbon" && stackedMax < 5)
+        ? null
+        : compactAxis(stackedMax);
 
     new Chart(canvas, {
       type: "bar",
