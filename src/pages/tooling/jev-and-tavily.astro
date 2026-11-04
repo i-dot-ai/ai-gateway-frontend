@@ -1,0 +1,109 @@
+---
+import ToolingLayout from "../../layouts/ToolingLayout.astro";
+import CopyableCode from "../../components/CopyableCode.astro";
+import { InsetText } from "@i-dot-ai-npm/component-library-astro";
+
+// The public gateway host. Kept local (not imported from lib/opencode.ts, whose
+// constant carries the OpenAI-compatible /v1 suffix these pass-through paths
+// do not use).
+const gateway = "https://llm-gateway.i.ai.gov.uk";
+
+const jevExample = `curl -X POST "${gateway}/typesafe/v1/systemone" \\
+  -H "Authorization: Bearer $GATEWAY_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "state": "Help! My payouts have been failing for 3 days.",
+    "model": "jev-latest",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this?",
+        "criteria": {
+          "billing": "Payments, invoicing, refunds",
+          "technical": "Bugs, outages, integrations"
+        }
+      }
+    }
+  }'`;
+
+const tavilyExample = `curl "${gateway}/v1/search/tavily-search" \\
+  -H "Authorization: Bearer $GATEWAY_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "query": "latest AI developments",
+    "max_results": 5
+  }'`;
+---
+
+<ToolingLayout title="Jev and Tavily" currentPath="/tooling/jev-and-tavily">
+  <h1 class="govuk-heading-xl">Jev and Tavily</h1>
+
+  <p class="govuk-body">
+    Alongside the chat models listed under{" "}
+    <a class="govuk-link" href="/models">
+      available models
+    </a>
+    , the gateway provides two more services: <strong>Jev</strong>, a decision
+    model, and <strong>Tavily</strong>, a web search tool. You use these with
+    the same{" "}
+    <a class="govuk-link" href="/tooling/get-your-key">
+      AI Gateway key
+    </a>{" "}
+    and call them directly.
+  </p>
+
+  <InsetText>
+    Both are served through pass-through endpoints, so they do not appear in the
+    list of available models.
+  </InsetText>
+
+  <h2 class="govuk-heading-l" id="jev">
+    Jev (decision model)
+  </h2>
+
+  <p class="govuk-body">
+    Jev is a decision model: instead of writing text, it returns a choice, a
+    score or a yes/no probability. Use it to classify, route or answer a set of
+    structured questions about some text.
+  </p>
+
+  <p class="govuk-body">
+    Send a <code class="app-code">POST</code> to{" "}
+    <code class="app-code">/typesafe/v1/systemone</code> with the text to judge
+    (<code class="app-code">state</code>), the model you want (
+    <code class="app-code">model</code>) and your{" "}
+    <code class="app-code">questions</code>:
+  </p>
+
+  <CopyableCode code={jevExample} />
+
+  <p class="govuk-body">
+    Everything under <code class="app-code">/typesafe/</code> is forwarded to
+    TypeSafe, so a <code class="app-code">GET</code> to{" "}
+    <code class="app-code">/typesafe/v1/models</code> lists the models you can
+    ask for. Jev costs $0.042 per 1 million input tokens, with no charge for
+    output.
+  </p>
+
+  <h2 class="govuk-heading-l" id="tavily">
+    Tavily (web search)
+  </h2>
+
+  <p class="govuk-body">
+    Tavily is a web search tool. Send a <code class="app-code">POST</code> to{" "}
+    <code class="app-code">/v1/search/tavily-search</code> with your{" "}
+    <code class="app-code">query</code>:
+  </p>
+
+  <CopyableCode code={tavilyExample} />
+
+  <p class="govuk-body">
+    Each result has a <code class="app-code">title</code>,{" "}
+    <code class="app-code">url</code> and <code class="app-code">snippet</code>.
+    You can ask for more with extra fields, such as{" "}
+    <code class="app-code">include_answer</code> for a short written answer or{" "}
+    <code class="app-code">include_raw_content</code> for the full page text.
+    Searches are charged per search.
+  </p>
+
+</ToolingLayout>
