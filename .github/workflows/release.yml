@@ -8,7 +8,7 @@
 #   {{version}}         e.g. 1.2.3
 #   {{major}}.{{minor}} e.g. 1.2
 #   {{major}}           e.g. 1
-#   sha-<short>         the exact commit (for pinning)
+#   sha-<commit>        the exact commit (for pinning)
 #   latest              stable releases only (never prereleases)
 #
 # Required org secrets: AWS_GITHUBRUNNER_PAT, AWS_REGION, AWS_ACCOUNT_ID.
@@ -110,7 +110,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=sha
+            type=sha,format=long
             type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
 
       - name: Build and push
