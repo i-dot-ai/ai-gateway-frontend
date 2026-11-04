@@ -46,7 +46,7 @@ The app builds to a standalone Node server (`@astrojs/node`), started with `node
 
 In production it sits behind an AWS ALB that performs OIDC authentication and forwards the identity in the `x-amzn-oidc-data` header, which `src/middleware.ts` validates against the auth API.
 
-The image is only built, tagged and pushed to ECR when a GitHub Release is published (`.github/workflows/release.yml`). Merging to `main` or pushing commits does not publish an image. Each release tags it with the version (`1.2.3`, `1.2`, `1`), the full commit hash (`sha-<commit>`) and, for non-prereleases, `latest`.
+The image is only built, tagged and pushed to ECR by `.github/workflows/release.yml`: either when a GitHub Release is published, or when the workflow is dispatched with a `version` (e.g. `v1.2.3`), in which case it creates that release at the dispatched commit and builds it in the same run. Merging to `main` or pushing commits does not publish an image. Each release tags it with the version (`1.2.3`, `1.2`, `1`), the full commit hash (`sha-<commit>`) and, for non-prereleases, `latest`.
 
 > Some deployment details in this repo — gateway hostnames, Slack channels and
 > internal repository links — are specific to the i.AI environment. Adjust them
