@@ -697,6 +697,68 @@ describe('litellm', () => {
 		});
 	});
 
+	describe('getJevCosts', () => {
+		it('keeps only the typesafe/jev-* model groups, joined to team names', async () => {
+			const fetchMock = vi.fn((url: string | URL) => {
+				const path = new URL(url).pathname;
+				if (path === '/v2/team/list') {
+					return Promise.resolve(jsonResponse({ teams: [{ team_id: 'team-a', team_alias: 'Team Alpha' }] }));
+				}
+				return Promise.resolve(
+					jsonResponse({
+						results: [
+							{
+								date: '2024-06-01',
+								breakdown: {
+									model_groups: {
+										'gpt-4': {
+											api_key_breakdown: {
+												k1: { metrics: { spend: 5, total_tokens: 50 }, metadata: { key_alias: 'a', team_id: 'team-a' } },
+											},
+										},
+										// The versioned name TypeSafe reports, plus the bare alias.
+										'typesafe/jev-1.13.0': {
+											api_key_breakdown: {
+												k2: { metrics: { spend: 2, total_tokens: 20 }, metadata: { key_alias: 'b', team_id: 'team-a' } },
+											},
+										},
+										'typesafe/jev-latest': {
+											api_key_breakdown: {
+												k3: { metrics: { spend: 1, total_tokens: 10 }, metadata: { key_alias: 'c', team_id: '' } },
+											},
+										},
+									},
+								},
+							},
+						],
+					})
+				);
+			});
+			vi.stubGlobal('fetch', fetchMock);
+			const { getJevCosts } = await import('./litellm');
+
+			const result = await getJevCosts('2024-05-27', '2024-06-02');
+
+			expect(result.error).toBeUndefined();
+			expect(result.costs.map((c) => c.model_name).sort()).toEqual(['typesafe/jev-1.13.0', 'typesafe/jev-latest']);
+			expect(result.costs.map((c) => c.spend).reduce((a, b) => a + b, 0)).toBe(3);
+			const byToken = Object.fromEntries(result.costs.map((c) => [c.key_token, c.team_name]));
+			expect(byToken).toEqual({ k2: 'Team Alpha', k3: '' });
+		});
+
+		it('returns an error when the proxy responds non-200', async () => {
+			const fetchMock = vi.fn((url: string | URL) =>
+				Promise.resolve(new URL(url).pathname === '/v2/team/list' ? jsonResponse({ teams: [] }) : jsonResponse({}, { status: 500 }))
+			);
+			vi.stubGlobal('fetch', fetchMock);
+			const { getJevCosts } = await import('./litellm');
+
+			const result = await getJevCosts('2024-05-27', '2024-06-02');
+
+			expect(result).toEqual({ costs: [], error: 'LiteLLM returned 500' });
+		});
+	});
+
 	describe('getTeams', () => {
 		it('maps team_id/team_alias, falling back to team_id when there is no alias', async () => {
 			const fetchMock = vi.fn().mockResolvedValue(
