@@ -6,11 +6,9 @@
  * spend, requests). Kept free of any fetch/DOM code so the aggregation can be unit
  * tested without mocking network calls, matching costs.ts / usage.ts.
  */
-import type { LitellmCost } from "./litellm";
+import { HEALTH_CHECK_KEY_TOKEN, type LitellmCost } from "./litellm";
 import { DEFAULT_TIMEFRAME, TIMEFRAMES, getDateRange, parseTimeframe, type Timeframe } from "./costs";
-import { GRANULARITY_DAYS, bucketSpans, listDates, shiftDate, type DailyUsage, type Granularity } from "./usage";
-
-export { listDates, shiftDate };
+import { GRANULARITY_DAYS, bucketSpans, shiftDate, type DailyUsage, type Granularity } from "./usage";
 
 /**
  * The "active X" panel can be read by two different entities. A cost row carries
@@ -41,17 +39,15 @@ const identityFor: Record<EntityDimension, (cost: LitellmCost) => string | null>
 };
 
 /**
- * LiteLLM's health-check probe is one internal key that calls every model on a
- * timer - infrastructure self-monitoring, not real usage. At scale it dwarfs the
- * request/token counts (hundreds of thousands of calls a week for ~$0), so it's
- * always excluded, including from the key count (it's one key). It has no user
- * or team, so the active user/team counts never saw it. Matched by its stable
- * internal token, since its alias is blank.
+ * Whether a cost row belongs to LiteLLM's internal health-check key. That probe
+ * is one key calling every model on a timer - infrastructure self-monitoring,
+ * not real usage. At scale it dwarfs the request/token counts (hundreds of
+ * thousands of calls a week for ~$0), so it's always excluded, including from
+ * the key count (it's one key). It has no user or team, so the active user/team
+ * counts never saw it. Matched by its stable internal token, since its alias is
+ * blank.
  */
-export const HEALTH_CHECK_KEY_TOKEN = "litellm-internal-health-check";
-
-/** Whether a cost row belongs to the internal health-check key. */
-export function isHealthCheckCost(cost: LitellmCost): boolean {
+function isHealthCheckCost(cost: LitellmCost): boolean {
 	return cost.key_token === HEALTH_CHECK_KEY_TOKEN;
 }
 

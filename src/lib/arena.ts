@@ -9,7 +9,8 @@ import { createHash } from 'node:crypto';
 import { parquetReadObjects } from 'hyparquet';
 import { z } from 'zod';
 import { STRONG_MODEL, chatJson } from './gatewayChat';
-import { getLitellmConfig, logger, type LitellmModel } from './litellm';
+import { getLitellmConfig, type LitellmModel } from './litellm';
+import { logger } from './logging';
 import { modelBase } from './modelNames';
 
 export const ARENA_DATASET_URL = 'https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset';

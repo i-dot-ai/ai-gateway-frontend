@@ -16,10 +16,7 @@ const authClient = new AuthApiClient({
 });
 
 // Create auth utilities
-const {
-  isAuthorisedUser,
-  getUserInfo,
-} = createAuthUtils(authClient, logger);
+const { getUserInfo } = createAuthUtils(authClient, logger);
 
 export async function parseAuthToken(token: string): Promise<UserAuthorisationResult | null> {
   if (!token) {
@@ -48,18 +45,5 @@ export async function parseAuthToken(token: string): Promise<UserAuthorisationRe
   } catch (error) {
     logger.error({ err: error, token: token.substring(0, 20) + '...' }, 'Error parsing auth token');
     return null;
-  }
-}
-
-export async function checkIsAuthorisedUser(token: string): Promise<boolean> {
-  if (!token) {
-    return false;
-  }
-
-  try {
-    return await isAuthorisedUser(token);
-  } catch (error) {
-    logger.error({ err: error }, 'Error checking user authorisation');
-    return false;
   }
 }

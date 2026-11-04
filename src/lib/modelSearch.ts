@@ -6,7 +6,8 @@
 import { ARENA_DATASET_URL, arenaPublished, arenaRankings, describeRank, hasArenaRankings, type ArenaRanking } from './arena';
 import { z } from 'zod';
 import { askModelChain, chatJson } from './gatewayChat';
-import { cachedKeyedFetcher, getAllModels, getLitellmConfig, logger, type LitellmModel } from './litellm';
+import { cachedKeyedFetcher, getAllModels, getLitellmConfig, type LitellmModel } from './litellm';
+import { logger } from './logging';
 import { isExtractable, usableModelDetails, type ModelDetails } from './modelDetails';
 import { modelBase, withoutHosting } from './modelNames';
 

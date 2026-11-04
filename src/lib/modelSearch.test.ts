@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LitellmModel } from './litellm';
-import { normaliseDetails, stripNavigation, type ModelDetails } from './modelDetails';
+import { normaliseDetails, type ModelDetails } from './modelDetails';
 import { modelBase } from './modelNames';
 import { arenaBase, describeRank, resetArena, arenaRankings, toArenaRow } from './arena';
 import { SuggestionsSchema, askContext, catalogueLine, classifyQuery, filterFromParams, getCostTier, getModelFamily, groupByPage, matchesFilter, matchesLookup, modelFacts, normaliseQuery, parseSuggestions, resolveModelName, resolveQuery } from './modelSearch';
