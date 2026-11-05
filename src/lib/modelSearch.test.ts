@@ -598,6 +598,24 @@ describe('getModelFamily', () => {
 	});
 });
 
+describe('listing type filter', () => {
+	it('accepts only known types', () => {
+		expect(filterFromParams(new URLSearchParams('type=pass-through')).type).toBe('pass-through');
+		expect(filterFromParams(new URLSearchParams('type=model')).type).toBe('model');
+		expect(filterFromParams(new URLSearchParams('type=banana')).type).toBeUndefined();
+	});
+
+	it('splits gateway models from pass-through services', async () => {
+		const { withPassThrough } = await import('./passThroughModels');
+		const catalogue = withPassThrough([model({ id: 'plain' })]);
+		const names = (type?: 'model' | 'pass-through') => catalogue.filter((m) => matchesFilter(m, { type })).map((m) => m.id);
+
+		expect(names()).toEqual(['plain', 'jev', 'tavily']);
+		expect(names('model')).toEqual(['plain']);
+		expect(names('pass-through')).toEqual(['jev', 'tavily']);
+	});
+});
+
 describe('filterFromParams validation', () => {
 	it('rejects invalid cost values', () => {
 		expect(filterFromParams(new URLSearchParams('cost=banana')).cost).toBeUndefined();
