@@ -120,11 +120,17 @@ function model(name, upstream, mode, info) {
 // Which backend serves each model, so the daily activity can group the same
 // usage by provider (the "By provider" tab) as well as by model.
 const MODEL_PROVIDER = Object.fromEntries(MODELS.map((m) => [m.model_name, m.model_info.litellm_provider]));
+// Pass-through usage (Jev) is not in MODELS. This name must match the
+// `usagePrefix` in src/lib/passThroughModels.ts; both are unverified against a
+// live gateway, so adjust the two together once checked.
+const JEV_GROUP = "typesafe/jev-1.13.0";
+MODEL_PROVIDER[JEV_GROUP] = "typesafe";
 // The real endpoint keys `breakdown.models` by the underlying model id without
 // its route ("eu.anthropic.claude-opus-4-6-v1"), and `breakdown.model_groups` by
 // the alias. Mirror that, so anything joining cost rows to models is exercised
 // the way production exercises it.
 const MODEL_UPSTREAM_ID = Object.fromEntries(MODELS.map((m) => [m.model_name, m.litellm_params.model.split("/").slice(1).join("/")]));
+MODEL_UPSTREAM_ID[JEV_GROUP] = "jev-1.13.0";
 
 // Which key uses which model, and roughly how busy it is. Drives the usage
 // charts, per-key sparklines and top-models list. The first three keys belong
@@ -138,7 +144,7 @@ const USAGE_PROFILE = [
 	{ token: "sk-demo-proto", alias: KEYS[2].key_alias, team_id: "t-policy", models: { "claude-sonnet-4-6": 1, "gpt-4o": 0.4 }, base: 90 },
 	{ token: "sk-bob", alias: "personal/bob@example.gov.uk/default", team_id: "", models: { "claude-sonnet-4-6": 1 }, base: 70 },
 	{ token: "sk-carol", alias: "policy-team/carol@example.gov.uk/research", team_id: "t-policy", models: { "claude-opus-4-6": 1, "gpt-4o": 0.5 }, base: 130, activeFromDays: 60 },
-	{ token: "sk-dave", alias: "data-science/dave@example.gov.uk/pipeline", team_id: "t-data", models: { "gpt-4o": 1 }, base: 55, sporadic: true, activeFromDays: 35 },
+	{ token: "sk-dave", alias: "data-science/dave@example.gov.uk/pipeline", team_id: "t-data", models: { "gpt-4o": 1, [JEV_GROUP]: 0.6 }, base: 55, sporadic: true, activeFromDays: 35 },
 	{ token: "sk-erin", alias: "personal/erin@example.gov.uk/default", team_id: "", models: { "claude-sonnet-4-6": 1, "claude-opus-4-6": 0.3 }, base: 60, activeFromDays: 14 },
 ];
 

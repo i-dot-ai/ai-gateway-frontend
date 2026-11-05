@@ -6,6 +6,7 @@
  * LITELLM_URL directly instead of going through getLitellmConfig.
  */
 import { logger } from './logging';
+import { PASS_THROUGH_MODELS } from './passThroughModels';
 import { shiftDate, todayUtc } from './usage';
 
 export { logger };
@@ -341,6 +342,13 @@ export interface LitellmModelResult {
 }
 
 export async function getModel(id: string): Promise<LitellmModelResult> {
+	// Pass-through models aren't in /v2/model/info, so check them first (and
+	// without depending on that call succeeding).
+	const passThrough = PASS_THROUGH_MODELS.find((m) => m.id === id);
+	if (passThrough) {
+		return { model: passThrough };
+	}
+
 	const all = await fetchAllModelsCached();
 	if (all.error !== undefined) {
 		return { error: all.error };
@@ -770,6 +778,9 @@ export async function getCosts(startDate: string, endDate: string, userId?: stri
  * The model_groups key matches the deployment alias (model.name), giving accurate
  * attribution regardless of what model name callers pass in requests.
  *
+ * Pass `usagePrefix` for a pass-through service, whose spend is logged under the
+ * name the provider reports ("typesafe/jev-1.13.0") rather than the alias.
+ *
  * The scan is platform-wide, so results are cached like the platform-wide cost
  * blocks; the team-name join happens per request, as in getCosts.
  */
@@ -777,9 +788,11 @@ export async function getModelCosts(
 	modelName: string,
 	startDate: string,
 	endDate: string,
+	usagePrefix?: string,
 ): Promise<{ costs: LitellmCost[]; error?: string }> {
+	const match = usagePrefix ? `prefix:${usagePrefix}` : `exact:${modelName}`;
 	const [result, teamsResult] = await Promise.all([
-		getModelCostsCached(`${modelName}|${startDate}|${endDate}`),
+		getModelCostsCached(`${match}|${startDate}|${endDate}`),
 		fetchTeamsCached(),
 	]);
 	if (result.error !== undefined) {
@@ -798,60 +811,19 @@ export async function getModelCosts(
 const getModelCostsCached = cachedKeyedFetcher(
 	PLATFORM_COSTS_CACHE_TTL_MS,
 	(key: string): Promise<{ costs: LitellmCost[]; error?: string }> => {
-		const [modelName, startDate, endDate] = key.split("|");
-		return fetchModelCosts(modelName, startDate, endDate);
+		// "exact:<name>" or "prefix:<prefix>" (model names never contain "|").
+		const [match, startDate, endDate] = key.split("|");
+		const [kind, value] = [match.slice(0, match.indexOf(":")), match.slice(match.indexOf(":") + 1)];
+		return fetchAggregatedGroupCosts(startDate, endDate, (name) =>
+			kind === "prefix" ? name.startsWith(value) : name === value,
+		);
 	},
 );
-
-// Jev is a pass-through model, so its spend is logged under the versioned name
-// TypeSafe reports ("typesafe/jev-1.13.0"), never the "jev-latest" alias, so the
-// exact-name lookup above misses it. Match the whole typesafe namespace instead.
-const JEV_MODEL_GROUP_PREFIX = "typesafe/";
-
-const getJevCostsCached = cachedKeyedFetcher(
-	PLATFORM_COSTS_CACHE_TTL_MS,
-	(key: string): Promise<{ costs: LitellmCost[]; error?: string }> => {
-		const [startDate, endDate] = key.split("|");
-		return fetchAggregatedGroupCosts(startDate, endDate, (name) => name.startsWith(JEV_MODEL_GROUP_PREFIX));
-	},
-);
-
-/**
- * Everyone's Jev usage across the gateway, for the /models/jev page. Same
- * aggregation and team-name join as getModelCosts; the only difference is that
- * it matches Jev's `typesafe/jev-*` spend rows rather than one exact name.
- */
-export async function getJevCosts(
-	startDate: string,
-	endDate: string,
-): Promise<{ costs: LitellmCost[]; error?: string }> {
-	const [result, teamsResult] = await Promise.all([
-		getJevCostsCached(`${startDate}|${endDate}`),
-		fetchTeamsCached(),
-	]);
-	if (result.error !== undefined) {
-		return { costs: [], error: result.error };
-	}
-	const teamNamesById = new Map(teamsResult.teams.map((t) => [t.id, t.name]));
-	const costs = result.costs.map((c) => ({
-		...c,
-		team_name: c.team_id ? teamNamesById.get(c.team_id) ?? c.team_id : "",
-	}));
-	return { costs };
-}
-
-async function fetchModelCosts(
-	modelName: string,
-	startDate: string,
-	endDate: string,
-): Promise<{ costs: LitellmCost[]; error?: string }> {
-	return fetchAggregatedGroupCosts(startDate, endDate, (name) => name === modelName);
-}
 
 /**
  * Per-key spend/token rows for every `model_groups` entry whose name `matches`,
- * over a date range. Shared by getModelCosts (one exact name) and getJevCosts (a
- * prefix). The scan is platform-wide, so callers cache it like the cost blocks.
+ * over a date range. The scan is platform-wide, so callers cache it like the
+ * cost blocks.
  */
 async function fetchAggregatedGroupCosts(
 	startDate: string,
