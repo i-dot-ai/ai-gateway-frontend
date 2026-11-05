@@ -5,6 +5,7 @@ import {
 	bucketValues,
 	compactAxis,
 	formatChartTick,
+	formatChartValue,
 	formatSpan,
 	formatFailureRate,
 	formatRequests,
@@ -412,6 +413,19 @@ describe("formatChartTick", () => {
 	it("drops a trailing .0 from compact token ticks", () => {
 		expect(formatChartTick(2_000_000, "tokens")).toBe("2M");
 		expect(formatChartTick(1_500_000, "tokens")).toBe("1.5M");
+	});
+
+	it("ticks carbon in grams with a decimal below 1k, compactly above", () => {
+		expect(formatChartTick(0.5, "carbon")).toBe("0.5");
+		expect(formatChartTick(400, "carbon")).toBe("400");
+		expect(formatChartTick(2_500, "carbon")).toBe("2.5k");
+	});
+});
+
+describe("formatChartValue", () => {
+	it("labels carbon tooltips in grams of CO2e", () => {
+		expect(formatChartValue(63.64, "carbon")).toBe("63.6 g CO₂e");
+		expect(formatChartValue(1250, "carbon")).toBe("1,250 g CO₂e");
 	});
 });
 
