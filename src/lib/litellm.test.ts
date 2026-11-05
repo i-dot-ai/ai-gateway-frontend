@@ -198,6 +198,18 @@ describe('litellm', () => {
 
 			expect(result).toEqual({ error: 'Model not found' });
 		});
+
+		it('returns a pass-through model without needing /v2/model/info', async () => {
+			const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}, { status: 500 }));
+			vi.stubGlobal('fetch', fetchMock);
+			const { getModel } = await import('./litellm');
+
+			const result = await getModel('jev');
+
+			expect(result.error).toBeUndefined();
+			expect(result.model?.name).toBe('jev-latest');
+			expect(fetchMock).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('getCosts', () => {
@@ -697,8 +709,8 @@ describe('litellm', () => {
 		});
 	});
 
-	describe('getJevCosts', () => {
-		it('keeps only the typesafe/jev-* model groups, joined to team names', async () => {
+	describe('getModelCosts for a pass-through model', () => {
+		it("matches Jev's typesafe/jev-* model groups by prefix, joined to team names", async () => {
 			const fetchMock = vi.fn((url: string | URL) => {
 				const path = new URL(url).pathname;
 				if (path === '/v2/team/list') {
@@ -727,6 +739,12 @@ describe('litellm', () => {
 												k3: { metrics: { spend: 1, total_tokens: 10 }, metadata: { key_alias: 'c', team_id: '' } },
 											},
 										},
+										// Another TypeSafe model is not Jev.
+										'typesafe/other-1.0.0': {
+											api_key_breakdown: {
+												k4: { metrics: { spend: 9, total_tokens: 90 }, metadata: { key_alias: 'd', team_id: '' } },
+											},
+										},
 									},
 								},
 							},
@@ -735,15 +753,19 @@ describe('litellm', () => {
 				);
 			});
 			vi.stubGlobal('fetch', fetchMock);
-			const { getJevCosts } = await import('./litellm');
+			const { getModelCosts } = await import('./litellm');
 
-			const result = await getJevCosts('2024-05-27', '2024-06-02');
+			const result = await getModelCosts('jev-latest', '2024-05-27', '2024-06-02', 'typesafe/jev-');
 
 			expect(result.error).toBeUndefined();
 			expect(result.costs.map((c) => c.model_name).sort()).toEqual(['typesafe/jev-1.13.0', 'typesafe/jev-latest']);
 			expect(result.costs.map((c) => c.spend).reduce((a, b) => a + b, 0)).toBe(3);
 			const byToken = Object.fromEntries(result.costs.map((c) => [c.key_token, c.team_name]));
 			expect(byToken).toEqual({ k2: 'Team Alpha', k3: '' });
+
+			// Without a prefix it's an exact-name lookup, cached separately.
+			const exact = await getModelCosts('typesafe/jev-latest', '2024-05-27', '2024-06-02');
+			expect(exact.costs.map((c) => c.key_token)).toEqual(['k3']);
 		});
 
 		it('returns an error when the proxy responds non-200', async () => {
@@ -751,9 +773,9 @@ describe('litellm', () => {
 				Promise.resolve(new URL(url).pathname === '/v2/team/list' ? jsonResponse({ teams: [] }) : jsonResponse({}, { status: 500 }))
 			);
 			vi.stubGlobal('fetch', fetchMock);
-			const { getJevCosts } = await import('./litellm');
+			const { getModelCosts } = await import('./litellm');
 
-			const result = await getJevCosts('2024-05-27', '2024-06-02');
+			const result = await getModelCosts('jev-latest', '2024-05-27', '2024-06-02', 'typesafe/jev-');
 
 			expect(result).toEqual({ costs: [], error: 'LiteLLM returned 500' });
 		});
