@@ -12,15 +12,8 @@ import {
   SelectOption,
   Button,
 } from "@i-dot-ai-npm/component-library-astro";
+import { readAndClearFlash } from "../../../lib/flash";
 import { KEY_ALIAS_PATTERN, listTeams } from "../../../lib/litellmKeys";
-
-async function readAndClearFlash(key: string): Promise<string | undefined> {
-  const value = await Astro.session?.get(key);
-  if (value) {
-    Astro.session?.delete(key);
-  }
-  return value || undefined;
-}
 
 if (Astro.request.method === "POST") {
   const email = await Astro.session?.get("user-email");
@@ -30,7 +23,7 @@ if (Astro.request.method === "POST") {
 
   const formData = await Astro.request.formData();
   const keyName = String(formData.get("keyName") ?? "").trim();
-  const [teamId, teamName] = String(formData.get("team") ?? "").split("|");
+  const submittedTeamId = String(formData.get("team") ?? "");
 
   if (!KEY_ALIAS_PATTERN.test(keyName)) {
     Astro.session?.set(
@@ -40,15 +33,35 @@ if (Astro.request.method === "POST") {
     return Astro.redirect("/keys/generate/team", 303);
   }
 
+  // Only the id is trusted from the form: the team must be one listTeams()
+  // offers (so never platform/personal/etc.), and its name comes from there too.
+  const { teams: selectableTeams, error: listTeamsError } = await listTeams();
+  const team = selectableTeams.find((t) => t.id === submittedTeamId);
+  if (!team) {
+    if (listTeamsError) {
+      Astro.session?.set("flash-teams-fetch-error", listTeamsError);
+    } else {
+      Astro.session?.set("flash-team-error", "Choose a team from the list.");
+    }
+    return Astro.redirect("/keys/generate/team", 303);
+  }
+
   Astro.session?.set("pending-key-name", keyName);
-  Astro.session?.set("pending-key-team-id", teamId || "");
-  Astro.session?.set("pending-key-team-name", teamName || "");
+  Astro.session?.set("pending-key-team-id", team.id);
+  Astro.session?.set("pending-key-team-name", team.name);
 
   return Astro.redirect("/keys/generate/confirm", 303);
 }
 
-const keyNameError = await readAndClearFlash("flash-key-name-error");
-const teamsError = await readAndClearFlash("flash-error");
+const keyNameError = await readAndClearFlash(
+  Astro.session,
+  "flash-key-name-error",
+);
+const teamsError = await readAndClearFlash(
+  Astro.session,
+  "flash-teams-fetch-error",
+);
+const teamError = await readAndClearFlash(Astro.session, "flash-team-error");
 const { teams, error: teamsFetchError } = await listTeams();
 ---
 
@@ -117,14 +130,21 @@ const { teams, error: teamsFetchError } = await listTeams();
             required
           />
         </FormGroup>
-        <FormGroup>
+        <FormGroup class:list={[{ "govuk-form-group--error": teamError }]}>
           <Label size="small" for="team">
             Team
           </Label>
           <Hint id="team-hint">Choose the team this work is for.</Hint>
-          <Select id="team" name="team" aria-describedby="team-hint">
+          {teamError && (
+            <ErrorMessage id="team-error">{teamError}</ErrorMessage>
+          )}
+          <Select
+            id="team"
+            name="team"
+            aria-describedby={teamError ? "team-hint team-error" : "team-hint"}
+          >
             {teams.map((t) => (
-              <SelectOption value={`${t.id}|${t.name}`}>{t.name}</SelectOption>
+              <SelectOption value={t.id}>{t.name}</SelectOption>
             ))}
           </Select>
         </FormGroup>
