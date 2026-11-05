@@ -1,7 +1,7 @@
 ---
 /**
- * The usage tabs - Spend, Tokens, Requests, Providers and Caching - over
- * already-fetched cost rows. Shared by the home page (the user's own keys,
+ * The usage tabs - Spend, Tokens, Requests, Providers, Caching and Impact -
+ * over already-fetched cost rows. Shared by the home page (the user's own keys,
  * broken down by model, worded "You spent...") and a model's page (everyone's
  * usage of that model, broken down by team, worded neutrally).
  */
@@ -10,6 +10,16 @@ import BreakdownTable from "./BreakdownTable.astro";
 import type { LitellmCost, LitellmProviderCost } from "../lib/litellm";
 import { keyName } from "../lib/litellmKeys";
 import { getDateRange, timeframeLabel, type Timeframe } from "../lib/costs";
+import {
+  coveragePct,
+  estimateRow,
+  formatCo2,
+  formatEnergy,
+  formatRange,
+  rangeMid,
+  totalImpact,
+  type ImpactIndex,
+} from "../lib/impact";
 import {
   bucketDailyUsage,
   bucketValues,
@@ -41,9 +51,11 @@ export interface Props {
   timeframe: Timeframe;
   /** What the stacked charts and "Top" tables split by. "model" is the user's own view; "team" the gateway-wide one. */
   breakdown: "model" | "team";
+  /** Pass to show the Impact tab. */
+  impactIndex?: ImpactIndex;
 }
 
-const { costs, providerCosts, timeframe, breakdown } = Astro.props;
+const { costs, providerCosts, timeframe, breakdown, impactIndex } = Astro.props;
 const timeframeCaption = ` in the ${timeframeLabel(timeframe).toLowerCase()}`;
 
 const { startDate, endDate } = getDateRange(timeframe);
@@ -310,6 +322,75 @@ const cacheTable: TableSpec = {
         ]
       : [],
 };
+
+// Environmental impact (ADR-0005), only when the caller passes the model index.
+// Midpoints drive the chart and table; the range goes in the subhead so a single
+// figure never reads as a measurement.
+// Each row is estimated once, and only rows inside the period count, so the
+// headline, chart and table always agree.
+const daySet = new Set(days);
+const rowImpact = new Map(
+  impactIndex
+    ? costs
+        .filter((c) => daySet.has(c.date))
+        .map((c) => [c, estimateRow(c, impactIndex)] as const)
+    : [],
+);
+const impactTotals = impactIndex ? totalImpact(rowImpact) : null;
+// Floored so partial coverage never reads as 100%.
+const impactCoverage = impactTotals ? Math.floor(coveragePct(impactTotals)) : 0;
+const hasImpactEstimate = (impactTotals?.estimatedTokens ?? 0) > 0;
+// Grams, to one decimal, so a light personal day doesn't round to zero.
+const carbonSeries = summariseModelSeries(
+  costs,
+  days,
+  (c) => {
+    const e = rowImpact.get(c);
+    return e ? rangeMid(e.gwpKg) * 1000 : 0;
+  },
+  groupOf,
+);
+const carbonDatasets = datasets(carbonSeries).map((d) => ({
+  ...d,
+  data: d.data.map((v) => Math.round(v * 10) / 10),
+}));
+const impactByGroup = new Map<
+  string,
+  { label: string; gwpKg: number; energyKwh: number }
+>();
+for (const [c, e] of rowImpact) {
+  if (!e) continue;
+  const label = groupOf(c);
+  const g = impactByGroup.get(label) ?? { label, gwpKg: 0, energyKwh: 0 };
+  g.gwpKg += rangeMid(e.gwpKg);
+  g.energyKwh += rangeMid(e.energyKwh);
+  impactByGroup.set(label, g);
+}
+const impactTable: TableSpec = {
+  heading: topHeading,
+  columns: [groupHeader, "Carbon", "Electricity"],
+  rows: topN([...impactByGroup.values()], (g) => g.gwpKg).map((g) => ({
+    label: g.label,
+    values: [formatCo2(g.gwpKg), formatEnergy(g.energyKwh)],
+  })),
+};
+const unestimated = [
+  ...new Set(
+    [...rowImpact]
+      .filter(([c, e]) => c.completion_tokens > 0 && e === null)
+      .map(([c]) => groupOf(c)),
+  ),
+].sort();
+const impactView = impactTotals && {
+  headline: hasImpactEstimate
+    ? `${personal ? "Your usage produced" : "Usage produced"} about ${formatCo2(rangeMid(impactTotals.gwpKg))} and used ${formatEnergy(rangeMid(impactTotals.energyKwh))} of electricity${timeframeCaption}`
+    : impactTotals.totalTokens > 0
+      ? `No estimate is available yet for the models ${personal ? "you " : ""}used${timeframeCaption}`
+      : `No generated output to estimate${timeframeCaption}`,
+  subhead: hasImpactEstimate
+    ? `Range: ${formatRange(impactTotals.gwpKg, formatCo2)}, ${formatRange(impactTotals.energyKwh, formatEnergy)}. Covers ${impactCoverage}% of ${personal ? "your " : ""}output tokens.`
+    : "",
+};
 ---
 
 <div class="govuk-tabs" data-module="govuk-tabs">
@@ -343,6 +424,13 @@ const cacheTable: TableSpec = {
       <li class="govuk-tabs__list-item">
         <a class="govuk-tabs__tab" href="#usage-caching">
           Caching
+        </a>
+      </li>
+    )}
+    {impactView && (
+      <li class="govuk-tabs__list-item">
+        <a class="govuk-tabs__tab" href="#usage-impact">
+          Impact
         </a>
       </li>
     )}
@@ -436,6 +524,49 @@ const cacheTable: TableSpec = {
         columns={cacheTable.columns}
         rows={cacheTable.rows}
       />
+    </div>
+  )}
+  {impactView && (
+    <div class="govuk-tabs__panel govuk-tabs__panel--hidden" id="usage-impact">
+      <h3 class="govuk-body-l govuk-!-font-weight-regular govuk-!-margin-bottom-1">
+        {impactView.headline}
+      </h3>
+      {impactView.subhead && (
+        <p class="govuk-body-s app-muted govuk-!-margin-bottom-3">
+          {impactView.subhead}
+        </p>
+      )}
+      <p class="govuk-body-s govuk-!-margin-bottom-3">
+        Estimated from each model's size and the grid where it runs. Modelled,
+        not measured, using{" "}
+        <a class="govuk-link" href="https://ecologits.ai/" rel="noopener">
+          ecologits
+        </a>
+      </p>
+      {hasImpactEstimate && (
+        <UsageChart
+          id="chart-impact"
+          labels={chartLabels}
+          titles={chartTitles}
+          datasets={carbonDatasets}
+          colors={CHART_PALETTE}
+          yLabel="Carbon (g CO₂e)"
+          valueFormat="carbon"
+          caption={`Carbon per ${granularity} by ${breakdown}, grams of CO₂e`}
+        />
+      )}
+      {impactTable.rows.length > 0 && (
+        <BreakdownTable
+          heading={impactTable.heading}
+          columns={impactTable.columns}
+          rows={impactTable.rows}
+        />
+      )}
+      {hasImpactEstimate && unestimated.length > 0 && (
+        <p class="govuk-body-s app-muted govuk-!-margin-top-3 govuk-!-margin-bottom-0">
+          No estimate yet for {unestimated.join(", ")}.
+        </p>
+      )}
     </div>
   )}
 </div>

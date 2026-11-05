@@ -19,7 +19,8 @@ import {
   TableHeader,
   TableCell,
 } from "@i-dot-ai-npm/component-library-astro";
-import { getCosts } from "../lib/litellm";
+import { getAllModels, getCosts } from "../lib/litellm";
+import { buildImpactIndex, type ImpactIndex } from "../lib/impact";
 import {
   getUserId,
   getUserKeys,
@@ -74,6 +75,8 @@ if (userEmail) {
 // Your usage over the selected timeframe. Only worth fetching once we know
 // they have keys to attribute usage to.
 let usageResult: Awaited<ReturnType<typeof getCosts>> | undefined;
+// Keys the Impact tab's estimates; left unset (tab hidden) if models fail to load.
+let impactIndex: ImpactIndex | undefined;
 
 // The keys Activity sparkline is a fixed "recent use" indicator - always the
 // last 30 days, independent of the usage timeframe below - so it reads the same
@@ -92,14 +95,18 @@ if (keys.length > 0) {
   // The usage window already spans the activity window for 30 days or more, so
   // only the 7-day window needs a second fetch to reach back a full 30 days.
   const activityNeedsFetch = days.length < activityDays.length;
-  const [usageFetch, activityResult] = await Promise.all([
+  const [usageFetch, activityResult, modelList] = await Promise.all([
     // Scoped to this user's keys - the home view only totals their own usage,
     // so there's no need to pull (and filter down from) the whole platform.
     getCosts(startDate, endDate, userId),
     activityNeedsFetch
       ? getCosts(activityStart, endDate, userId)
       : Promise.resolve(null),
+    getAllModels(),
   ]);
+  if (modelList.error === undefined) {
+    impactIndex = buildImpactIndex(modelList.models);
+  }
   // Drop rows from keys the user no longer has (e.g. deleted): the user_id
   // scope covers every key they ever owned, but the view only shows current ones.
   const aliasSet = new Set(aliases);
@@ -206,17 +213,16 @@ function teamLabel(alias: string): string {
           <p class="govuk-body">There are 3 kinds of key, a:</p>
           <ul class="govuk-list govuk-list--bullet">
             <li>
-              <strong>personal key</strong> for your own use (such as
-              performance management or personal development)
+              <strong>personal key</strong> for everyday development,
+              professional development or community work
             </li>
             <li>
-              <strong>team key</strong> for team and professional work (such as
-              prototyping, evaluation or development to support your profession)
+              <strong>team key</strong> for activities for a specific team (for
+              example, Consult development or evaluations)
             </li>
             <li>
-              <strong>product key</strong> for use by products (if you need
-              this, contact us in the #ai-model-gateway-team channel on i.AI
-              Slack)
+              <strong>product key</strong> for the product or app to use
+              directly (contact us on #ai-model-gateway-team channel)
             </li>
           </ul>
         </DetailsText>
@@ -342,6 +348,7 @@ function teamLabel(alias: string): string {
               providerCosts={usageResult.providerCosts}
               timeframe={timeframe}
               breakdown="model"
+              impactIndex={impactIndex}
             />
           )}
         </>

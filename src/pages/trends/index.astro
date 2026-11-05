@@ -111,7 +111,8 @@ const impactBuckets = bucketImpact(
   impactDays.filter((d) => d.date >= chartStart),
   granularity,
 );
-const coverageRounded = Math.round(coveragePct(impact));
+// Floored so partial coverage never reads as 100%.
+const coverageRounded = Math.floor(coveragePct(impact));
 
 // Spell out the window in plain dates so "30 days" can't be read as a calendar month.
 const periodNoun = `${days} days`;

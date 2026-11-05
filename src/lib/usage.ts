@@ -418,10 +418,14 @@ export function formatSpan(span: Pick<DailyUsage, "date" | "end">, formatDate: (
 	return span.end && span.end !== span.date ? `${formatDate(span.date)} to ${formatDate(span.end)}` : formatDate(span.date);
 }
 
-/** Chart value for tooltips: spend, compact tokens, or a plain count. */
+/** Grams to one decimal ("0.4", "63.6", "1,250"). */
+const grams = (value: number) => value.toLocaleString("en-GB", { maximumFractionDigits: 1 });
+
+/** Chart value for tooltips: spend, compact tokens, grams of CO2e, or a plain count. */
 export function formatChartValue(value: number, format: string): string {
 	if (format === "spend") return formatSpend(value);
 	if (format === "tokens") return formatTokens(value);
+	if (format === "carbon") return `${grams(value)} g CO₂e`;
 	return value.toLocaleString("en-GB");
 }
 
@@ -435,6 +439,7 @@ export function formatChartTick(value: number, format: string, ticks: ReadonlyAr
 	if (format === "spend") {
 		return ticks.some((t) => !Number.isInteger(t.value)) ? formatSpend(value) : `$${value.toLocaleString("en-GB")}`;
 	}
+	if (format === "carbon" && value < 1_000) return grams(value);
 	return trimCompact(compact(value));
 }
 
