@@ -210,6 +210,16 @@ describe('litellm', () => {
 			expect(result.model?.name).toBe('jev-latest');
 			expect(fetchMock).not.toHaveBeenCalled();
 		});
+
+		it('returns a pass-through tool with its endpoints', async () => {
+			vi.stubGlobal('fetch', vi.fn());
+			const { getModel } = await import('./litellm');
+			const { isPassThrough } = await import('./passThroughModels');
+
+			const { model } = await getModel('tavily');
+
+			expect(model && isPassThrough(model) && model.passThrough.endpoints).toContain('/tavily/search');
+		});
 	});
 
 	describe('getCosts', () => {

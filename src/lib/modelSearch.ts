@@ -9,6 +9,7 @@ import { askModelChain, chatJson } from './gatewayChat';
 import { cachedKeyedFetcher, getAllModels, getLitellmConfig, logger, type LitellmModel } from './litellm';
 import { isExtractable, usableModelDetails, type ModelDetails } from './modelDetails';
 import { modelBase, withoutHosting } from './modelNames';
+import { isPassThrough, isPassThroughTool, withPassThrough } from './passThroughModels';
 
 export const MAX_QUERY_LENGTH = 200;
 
@@ -36,7 +37,15 @@ export interface ModelFilter {
 	cost?: 'low' | 'medium' | 'high';
 	family?: string;
 	usecase?: UseCase;
+	/** Gateway models only, or pass-through services only. */
+	type?: ListingType;
 }
+
+export const LISTING_TYPES = [
+	{ id: 'model', label: 'Models' },
+	{ id: 'pass-through', label: 'Pass-through services' },
+] as const;
+export type ListingType = typeof LISTING_TYPES[number]['id'];
 
 /** Cost tiers based on combined input+output cost per million tokens. */
 export type CostTier = 'low' | 'medium' | 'high';
@@ -113,6 +122,7 @@ export function filterFromParams(params: URLSearchParams): ModelFilter {
 	const family = MODEL_FAMILIES.some(f => f.id === familyParam) ? familyParam as ModelFamily : undefined;
 	const usecaseParam = params.get('usecase');
 	const usecase = USE_CASES.find(u => u.id === usecaseParam)?.id;
+	const type = LISTING_TYPES.find(t => t.id === params.get('type'))?.id;
 	return {
 		provider: params.get('provider') || undefined,
 		location: params.get('location') || undefined,
@@ -121,6 +131,7 @@ export function filterFromParams(params: URLSearchParams): ModelFilter {
 		cost,
 		family,
 		usecase,
+		type,
 	};
 }
 
@@ -131,7 +142,8 @@ export function matchesFilter(model: LitellmModel, f: ModelFilter): boolean {
 		(!f.vision || model.supports_vision) &&
 		(!f.reasoning || model.supports_reasoning) &&
 		(f.cost === undefined || getCostTier(model) === f.cost) &&
-		(f.family === undefined || getModelFamily(model) === f.family)
+		(f.family === undefined || getModelFamily(model) === f.family) &&
+		(f.type === undefined || (f.type === 'pass-through') === isPassThrough(model))
 	);
 }
 
@@ -145,6 +157,7 @@ export function describeFilter(f: ModelFilter): string {
 		f.cost && `${f.cost} cost`,
 		f.family && `${f.family} family`,
 		f.usecase && `usecase ${f.usecase}`,
+		f.type && `type ${f.type}`,
 	]
 		.filter(Boolean)
 		.join(', ');
@@ -314,6 +327,8 @@ Hosting: UK and EU hosting are equally acceptable; never prefer one over the oth
 question asks. Order suggestions by capability for the task, then cost. Suggest a
 model hosted elsewhere (global, US) only if it is clearly better than every UK/EU option, and say
 where it is hosted. For sensitive, personal or official data, suggest only UK or EU models.
+mode=decision models return a choice, score or yes/no probability instead of text: suggest one
+only when the question is about classifying, routing, scoring or yes/no judgements of text.
 arena= gives Arena human-preference leaderboard ranks; lower is better. "tied #1 of 408 (12th by
 score)" means the model is statistically indistinguishable from the others tied at #1, so never
 prefer one model over another because of score order inside a tie.
@@ -410,8 +425,10 @@ async function fetchSuggestions(query: string, filter: ModelFilter): Promise<Ask
 
 	const all = await getAllModels();
 	if (all.error !== undefined) return { suggestions: [], error: all.error };
+	// Pass-through models (Jev) can be suggested; pass-through tools (Tavily) aren't models.
+	const suggestable = withPassThrough(all.models).filter((m) => !isPassThroughTool(m));
 	// Only rank models the page's filters leave in the table.
-	const candidates = all.models.filter((m) => matchesFilter(m, filter));
+	const candidates = suggestable.filter((m) => matchesFilter(m, filter));
 	if (candidates.length === 0) return { suggestions: [] };
 
 	const catalogue = groupByPage(candidates)
@@ -432,7 +449,7 @@ async function fetchSuggestions(query: string, filter: ModelFilter): Promise<Ask
 			logger.warn({ model, query, error: raw.error }, 'Model suggestions call failed');
 			continue;
 		}
-		suggestions = parseSuggestions(raw.value, candidates, usableModelDetails, arenaRankings, all.models);
+		suggestions = parseSuggestions(raw.value, candidates, usableModelDetails, arenaRankings, suggestable);
 		const namedSome = raw.value.suggestions.length > 0;
 		if (suggestions.length > 0 || !namedSome) {
 			answered = true; // real picks, or a deliberate "nothing fits"
