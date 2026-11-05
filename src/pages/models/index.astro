@@ -33,6 +33,7 @@ import {
   normaliseQuery,
   resolveQuery,
   COST_TIER_LABELS,
+  LISTING_TYPES,
   MODEL_FAMILIES,
   USE_CASES,
   type CostTier,
@@ -40,6 +41,11 @@ import {
 import { logger } from "../../lib/logging";
 import { captureModelSearch } from "../../lib/posthog";
 import { formatDate } from "../../lib/format";
+import {
+  isPassThrough,
+  isPassThroughTool,
+  withPassThrough,
+} from "../../lib/passThroughModels";
 import {
   windowDef,
   bucketKeys,
@@ -72,12 +78,13 @@ const [allModels, latest, history] = await Promise.all([
   getModelHealthLatest(),
   getModelHealthHistory(sinceIso),
 ]);
-const providers = [...new Set(allModels.models.map((m) => m.provider))].sort();
+// The gateway's models plus its pass-through services, so one list (and its
+// filters and search) covers both. Health is only checked for models.
+const catalogue = withPassThrough(allModels.models);
+const providers = [...new Set(catalogue.map((m) => m.provider))].sort();
 const locations = [
   ...new Set(
-    allModels.models
-      .map((m) => m.location)
-      .filter((l): l is string => Boolean(l)),
+    catalogue.map((m) => m.location).filter((l): l is string => Boolean(l)),
   ),
 ].sort();
 
@@ -106,7 +113,7 @@ const query = normaliseQuery(params.get("q"));
 // Shared with /models/suggestions, so AI suggestions only name models in the filtered table.
 // Use the validated filter as the single source of truth for all filter values.
 const filter = filterFromParams(params);
-const filtered = allModels.models.filter((m) => matchesFilter(m, filter));
+const filtered = catalogue.filter((m) => matchesFilter(m, filter));
 
 // Validated filter values for UI - use filter.* for cost/family/usecase to ensure
 // invalid params don't render empty tags or count as active filters.
@@ -117,6 +124,7 @@ const selectedFamily = filter.family;
 const selectedUseCase = filter.usecase;
 const hasVision = filter.vision ?? false;
 const hasReasoning = filter.reasoning ?? false;
+const selectedType = filter.type;
 
 // URL for removing a single filter param (used by filter tags)
 const withoutParam = (key: string) => {
@@ -135,7 +143,7 @@ const effectiveQuery = resolveQuery(params);
 // Use cases always trigger suggestions.
 const question =
   Boolean(effectiveQuery) &&
-  classifyQuery(effectiveQuery, allModels.models) === "question";
+  classifyQuery(effectiveQuery, catalogue) === "question";
 const keywordHits =
   effectiveQuery && !question && !selectedUseCase
     ? filtered.filter((m) => matchesLookup(m, effectiveQuery))
@@ -162,7 +170,9 @@ if (query && !showSuggestions) {
 }
 
 // What the AI answer will be based on, known before the LLM call, so it shows while waiting.
-const basis = showSuggestions ? askContext(allModels.models) : undefined;
+const basis = showSuggestions
+  ? askContext(catalogue.filter((m) => !isPassThroughTool(m)))
+  : undefined;
 const basisText = basis
   ? `Based on ${basis.pages_included} of ${basis.pages_total} provider pages` +
     (basis.details_updated_at
@@ -181,7 +191,8 @@ const hasActiveFilters = Boolean(
   selectedFamily ||
   selectedUseCase ||
   hasVision ||
-  hasReasoning,
+  hasReasoning ||
+  selectedType,
 );
 
 // Overall status banner from the roll-up.
@@ -214,21 +225,17 @@ function currentLabel(status: DayStatus): string {
 }
 ---
 
-<GovukLayout title="Available models">
-  <h1 class="govuk-heading-l">Available models</h1>
+<GovukLayout title="Models and services">
+  <h1 class="govuk-heading-l">Models and services</h1>
 
   <p class="govuk-body">
-    These are the language models available through the AI Gateway — select a
-    model to see more information, such as cost and token limits.
+    These are the language models and services available through the AI Gateway.
+    Select one to see more information, such as cost, limits and how to call it.
   </p>
 
   <p class="govuk-body">
-    TypeSafe's{" "}
-    <a class="govuk-link" href="/models/jev">
-      Jev decision model
-    </a>{" "}
-    is also available. The Tavily search tool is reached through a pass-through
-    endpoint, so it isn't listed.
+    Pass-through services, such as Jev and Tavily, are called through their own
+    gateway route rather than as a model, so they aren't health-checked.
   </p>
 
   {/* Search bar with expandable advanced filters */}
@@ -254,7 +261,7 @@ function currentLabel(status: DayStatus): string {
     <Details class="app-filter-bar__advanced">
       <DetailsSummary>Advanced filters</DetailsSummary>
       <DetailsText>
-        <div class="app-filter-bar__row">
+        <div class="app-filter-bar__grid">
           <div class="app-filter-bar__field">
             <label class="govuk-label govuk-label--s" for="family">
               Model family
@@ -294,10 +301,20 @@ function currentLabel(status: DayStatus): string {
               ))}
             </select>
           </div>
-        </div>
-
-        <div class="app-filter-bar__row">
-          <div class="app-filter-bar__field app-filter-bar__field--wide">
+          <div class="app-filter-bar__field">
+            <label class="govuk-label govuk-label--s" for="type">
+              Type
+            </label>
+            <select class="govuk-select" id="type" name="type">
+              <option value="">All types</option>
+              {LISTING_TYPES.map(({ id, label }) => (
+                <option value={id} selected={id === selectedType}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="app-filter-bar__field">
             <label class="govuk-label govuk-label--s" for="cost">
               Cost
             </label>
@@ -312,7 +329,7 @@ function currentLabel(status: DayStatus): string {
               )}
             </select>
           </div>
-          <div class="app-filter-bar__field app-filter-bar__field--wide">
+          <div class="app-filter-bar__field">
             <label class="govuk-label govuk-label--s" for="usecase">
               Use case
             </label>
@@ -325,7 +342,10 @@ function currentLabel(status: DayStatus): string {
               ))}
             </select>
           </div>
-          <div class="app-filter-bar__field app-filter-bar__field--capabilities">
+        </div>
+
+        <div class="app-filter-bar__footer">
+          <div class="app-filter-bar__field--capabilities">
             <fieldset class="govuk-fieldset">
               <legend class="govuk-visually-hidden">Capabilities</legend>
               <div
@@ -367,7 +387,7 @@ function currentLabel(status: DayStatus): string {
               </div>
             </fieldset>
           </div>
-          <div class="app-filter-bar__field app-filter-bar__field--button">
+          <div class="app-filter-bar__apply">
             <button
               type="submit"
               class="govuk-button"
@@ -448,6 +468,15 @@ function currentLabel(status: DayStatus): string {
           <li>
             <a class="app-filter-tags__tag" href={withoutParam("reasoning")}>
               Reasoning <span aria-hidden="true">✕</span>
+              <span class="govuk-visually-hidden">(remove filter)</span>
+            </a>
+          </li>
+        )}
+        {selectedType && (
+          <li>
+            <a class="app-filter-tags__tag" href={withoutParam("type")}>
+              {LISTING_TYPES.find((t) => t.id === selectedType)?.label}{" "}
+              <span aria-hidden="true">✕</span>
               <span class="govuk-visually-hidden">(remove filter)</span>
             </a>
           </li>
@@ -569,12 +598,12 @@ function currentLabel(status: DayStatus): string {
 
   <Table class="app-models-table app-table--stacked">
     <TableCaption class="govuk-visually-hidden">
-      Models available on the LLM Gateway, with each model's availability over
-      the last {def.label}
+      Models and services available on the LLM Gateway, with each model's
+      availability over the last {def.label}
     </TableCaption>
     <TableHead>
       <TableRow>
-        <TableHeader>Model</TableHeader>
+        <TableHeader>Name</TableHeader>
         <TableHeader class="app-col--wide">Provider</TableHeader>
         <TableHeader>Location</TableHeader>
         <TableHeader class="app-status-col">24hr status</TableHeader>
@@ -597,6 +626,14 @@ function currentLabel(status: DayStatus): string {
               {m.location}
             </TableCell>
             <TableCell class="app-status-col" data-label="24hr status">
+              {isPassThrough(m) && (
+                <div class="app-status-cell">
+                  <Tag colour="purple">Pass-through</Tag>
+                  <span class="govuk-body-s app-status-cell__uptime">
+                    Not health-checked
+                  </span>
+                </div>
+              )}
               {health && (
                 <div class="app-status-cell">
                   <Tag colour={STATUS_TAG[health.currentStatus]}>
@@ -623,7 +660,7 @@ function currentLabel(status: DayStatus): string {
 
   <p class="govuk-body app-results-count">
     Showing <span id="results-count">{models.length}</span> of{" "}
-    {allModels.models.length} models
+    {catalogue.length} models and services
     {query && !question && !keywordMiss ? ` matching "${query}"` : ""}
   </p>
 </GovukLayout>
@@ -704,7 +741,7 @@ function currentLabel(status: DayStatus): string {
           onlyButton.setAttribute("aria-pressed", String(onlySuggested));
           status.textContent = onlySuggested
             ? `Showing ${shown} suggested models.`
-            : `Showing all ${shown} models.`;
+            : `Showing all ${shown} models and services.`;
         });
       })
       .catch(() => {
@@ -765,26 +802,12 @@ function currentLabel(status: DayStatus): string {
     margin-bottom: 0;
   }
 
-  /* Fields wrap to the next line on narrow screens rather than squashing. */
-  .app-filter-bar__row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 15px;
-    margin-bottom: 15px;
-  }
-
-  .app-filter-bar__row:last-child {
-    margin-bottom: 0;
-  }
-
-  .app-filter-bar__field {
-    flex: 1 1 160px;
-    min-width: 140px;
-  }
-
-  .app-filter-bar__field--wide {
-    flex: 2 1 200px;
+  /* The advanced filters' selects in an even grid: as many columns as fit, never
+     narrower than a GOV.UK select, so rows wrap cleanly instead of squashing. */
+  .app-filter-bar__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+    gap: 15px 20px;
   }
 
   .app-filter-bar .govuk-label {
@@ -794,6 +817,7 @@ function currentLabel(status: DayStatus): string {
   .app-filter-bar .govuk-select,
   .app-filter-bar .govuk-input {
     width: 100%;
+    min-width: 0;
     margin-bottom: 0;
   }
 
@@ -801,14 +825,14 @@ function currentLabel(status: DayStatus): string {
     margin-bottom: 0;
   }
 
-  /* Capabilities share the row with the selects; the checkboxes wrap on narrow
-     screens instead of overflowing. Vertically centred against the select boxes. */
-  .app-filter-bar__field--capabilities {
-    flex: 1 1 200px;
-    min-width: 200px;
+  /* Capabilities on the left, Apply on the right; they stack on narrow screens. */
+  .app-filter-bar__footer {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    gap: 15px;
+    margin-top: 20px;
   }
 
   .app-filter-bar__field--capabilities .govuk-checkboxes--small {
@@ -819,13 +843,6 @@ function currentLabel(status: DayStatus): string {
 
   .app-filter-bar__field--capabilities .govuk-checkboxes__item {
     margin-bottom: 0;
-  }
-
-  .app-filter-bar__field--button {
-    flex: 0 0 auto;
-    display: flex;
-    justify-content: flex-end;
-    align-items: flex-end;
   }
 
   /* Selected filter tags - grey background, connects to filter bar above */
@@ -1055,7 +1072,7 @@ function currentLabel(status: DayStatus): string {
     white-space: nowrap;
   }
 
-  /* Left-aligned so every row lines up under the header. */
+  /* Left-aligned so health and pass-through rows line up under the header. */
   .app-status-cell {
     display: flex;
     flex-direction: row;
