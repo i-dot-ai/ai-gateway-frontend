@@ -1,7 +1,7 @@
 ---
 import GovukLayout from "../../../layouts/GovukLayout.astro";
 import CopyableCode from "../../../components/CopyableCode.astro";
-import { WarningText } from "@i-dot-ai-npm/component-library-astro";
+import { WarningText } from "@i-dot-ai-npm/component-library-solid";
 
 async function readAndClearFlash(key: string): Promise<string | undefined> {
   const value = await Astro.session?.get(key);
