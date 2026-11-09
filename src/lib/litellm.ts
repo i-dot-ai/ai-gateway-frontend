@@ -6,6 +6,7 @@
  * LITELLM_URL directly instead of going through getLitellmConfig.
  */
 import { logger } from './logging';
+import { PASS_THROUGH_MODELS } from './passThroughModels';
 import { shiftDate, todayUtc } from './usage';
 
 export { logger };
@@ -341,6 +342,13 @@ export interface LitellmModelResult {
 }
 
 export async function getModel(id: string): Promise<LitellmModelResult> {
+	// Pass-through models aren't in /v2/model/info, so check them first (and
+	// without depending on that call succeeding).
+	const passThrough = PASS_THROUGH_MODELS.find((m) => m.id === id);
+	if (passThrough) {
+		return { model: passThrough };
+	}
+
 	const all = await fetchAllModelsCached();
 	if (all.error !== undefined) {
 		return { error: all.error };
@@ -770,6 +778,9 @@ export async function getCosts(startDate: string, endDate: string, userId?: stri
  * The model_groups key matches the deployment alias (model.name), giving accurate
  * attribution regardless of what model name callers pass in requests.
  *
+ * Pass `usagePrefix` for a pass-through service, whose spend is logged under the
+ * name the provider reports ("typesafe/jev-1.13.0") rather than the alias.
+ *
  * The scan is platform-wide, so results are cached like the platform-wide cost
  * blocks; the team-name join happens per request, as in getCosts.
  */
@@ -777,9 +788,11 @@ export async function getModelCosts(
 	modelName: string,
 	startDate: string,
 	endDate: string,
+	usagePrefix?: string,
 ): Promise<{ costs: LitellmCost[]; error?: string }> {
+	const match = usagePrefix ? `prefix:${usagePrefix}` : `exact:${modelName}`;
 	const [result, teamsResult] = await Promise.all([
-		getModelCostsCached(`${modelName}|${startDate}|${endDate}`),
+		getModelCostsCached(`${match}|${startDate}|${endDate}`),
 		fetchTeamsCached(),
 	]);
 	if (result.error !== undefined) {
@@ -798,15 +811,24 @@ export async function getModelCosts(
 const getModelCostsCached = cachedKeyedFetcher(
 	PLATFORM_COSTS_CACHE_TTL_MS,
 	(key: string): Promise<{ costs: LitellmCost[]; error?: string }> => {
-		const [modelName, startDate, endDate] = key.split("|");
-		return fetchModelCosts(modelName, startDate, endDate);
+		// "exact:<name>" or "prefix:<prefix>" (model names never contain "|").
+		const [match, startDate, endDate] = key.split("|");
+		const [kind, value] = [match.slice(0, match.indexOf(":")), match.slice(match.indexOf(":") + 1)];
+		return fetchAggregatedGroupCosts(startDate, endDate, (name) =>
+			kind === "prefix" ? name.startsWith(value) : name === value,
+		);
 	},
 );
 
-async function fetchModelCosts(
-	modelName: string,
+/**
+ * Per-key spend/token rows for every `model_groups` entry whose name `matches`,
+ * over a date range. The scan is platform-wide, so callers cache it like the
+ * cost blocks.
+ */
+async function fetchAggregatedGroupCosts(
 	startDate: string,
 	endDate: string,
+	matches: (modelName: string) => boolean,
 ): Promise<{ costs: LitellmCost[]; error?: string }> {
 	const { config, error: configError } = getLitellmConfig();
 	if (!config) {
@@ -833,32 +855,32 @@ async function fetchModelCosts(
 		const costs: LitellmCost[] = [];
 
 		for (const result of body.results) {
-			const date = result.date;
-			const modelGroup = result.breakdown?.model_groups?.[modelName];
-			if (!modelGroup) continue;
+			for (const [modelName, modelGroup] of Object.entries(result.breakdown?.model_groups ?? {}) as Array<[string, any]>) {
+				if (!matches(modelName)) continue;
 
-			// Extract per-key breakdown from api_key_breakdown
-			for (const [token, subValue] of Object.entries(modelGroup.api_key_breakdown || {}) as Array<[string, any]>) {
-				// Skip health-check key - it polls every model every 5 minutes
-				if (token === "litellm-internal-health-check") continue;
+				// Extract per-key breakdown from api_key_breakdown
+				for (const [token, subValue] of Object.entries(modelGroup.api_key_breakdown || {}) as Array<[string, any]>) {
+					// Skip health-check key - it polls every model every 5 minutes
+					if (token === "litellm-internal-health-check") continue;
 
-				costs.push({
-					date,
-					model_name: modelName,
-					spend: subValue.metrics.spend,
-					total_tokens: subValue.metrics.total_tokens,
-					prompt_tokens: subValue.metrics.prompt_tokens ?? 0,
-					completion_tokens: subValue.metrics.completion_tokens ?? 0,
-					cache_read_input_tokens: subValue.metrics.cache_read_input_tokens ?? 0,
-					cache_creation_input_tokens: subValue.metrics.cache_creation_input_tokens ?? 0,
-					api_requests: subValue.metrics.api_requests ?? 0,
-					failed_requests: subValue.metrics.failed_requests ?? 0,
-					key_alias: subValue.metadata.key_alias ?? "",
-					key_token: token,
-					team_id: subValue.metadata.team_id ?? "",
-					user_id: null,
-					team_name: "",
-				});
+					costs.push({
+						date: result.date,
+						model_name: modelName,
+						spend: subValue.metrics.spend,
+						total_tokens: subValue.metrics.total_tokens,
+						prompt_tokens: subValue.metrics.prompt_tokens ?? 0,
+						completion_tokens: subValue.metrics.completion_tokens ?? 0,
+						cache_read_input_tokens: subValue.metrics.cache_read_input_tokens ?? 0,
+						cache_creation_input_tokens: subValue.metrics.cache_creation_input_tokens ?? 0,
+						api_requests: subValue.metrics.api_requests ?? 0,
+						failed_requests: subValue.metrics.failed_requests ?? 0,
+						key_alias: subValue.metadata.key_alias ?? "",
+						key_token: token,
+						team_id: subValue.metadata.team_id ?? "",
+						user_id: null,
+						team_name: "",
+					});
+				}
 			}
 		}
 

@@ -4,6 +4,7 @@ import StatusTimeline from "../../components/StatusTimeline.astro";
 import StatusLegend from "../../components/StatusLegend.astro";
 import TimeframeNav from "../../components/TimeframeNav.astro";
 import UsageTabs from "../../components/UsageTabs.astro";
+import CopyableCode from "../../components/CopyableCode.astro";
 import {
   Tag,
   BackLink,
@@ -18,8 +19,9 @@ import {
   getModel,
   getModelHealthHistory,
   getModelCosts,
-  type LitellmCost,
 } from "../../lib/litellm";
+import { isPassThrough } from "../../lib/passThroughModels";
+import { formatPerMillion } from "../../lib/format";
 import { formatRequests, formatTokens, trimCompact } from "../../lib/usage";
 import {
   DEFAULT_TIMEFRAME,
@@ -54,6 +56,12 @@ const { id } = Astro.params;
 const { model, error } = id
   ? await getModel(id)
   : { model: undefined, error: "No model id provided" };
+// Pass-through models aren't health-checked, so they get a note instead.
+const passThrough =
+  model && isPassThrough(model) ? model.passThrough : undefined;
+// A pass-through service with endpoints is a tool, not a model: its page shows
+// the endpoints and an example call instead of model-only details.
+const tool = passThrough?.endpoints ? passThrough : undefined;
 
 // A wider 90-day daily availability history for this one model (the list page
 // shows only the last 24 hours). Scoped to this model via the history fetch's
@@ -62,23 +70,6 @@ const { model, error } = id
 const HEALTH_WINDOW = "90d" as const;
 const healthDef = windowDef(HEALTH_WINDOW);
 const healthKeys = bucketKeys(HEALTH_WINDOW);
-let health: ModelHealth | undefined;
-let healthError: string | undefined;
-if (model) {
-  // The model-scoped history is paged newest-first, so it already contains the
-  // current check - no need for the all-models /health/latest snapshot here.
-  const history = await getModelHealthHistory(
-    windowStartIso(HEALTH_WINDOW),
-    model.name,
-  );
-  health = summariseModelHealth(
-    history.checks,
-    [model.name],
-    healthKeys,
-    healthDef.granularity,
-  ).models[0];
-  healthError = history.error;
-}
 
 // Everyone's usage of this model across the gateway, fetched from the model_groups
 // breakdown which is keyed by deployment alias (model.name). This matches the actual
@@ -87,12 +78,29 @@ const timeframe = parseTimeframe(
   Astro.url.searchParams.get("timeframe"),
   DEFAULT_TIMEFRAME,
 );
-let usage: { costs: LitellmCost[]; error?: string } | undefined;
-if (model) {
-  const { startDate, endDate } = getDateRange(timeframe);
-  const result = await getModelCosts(model.name, startDate, endDate);
-  usage = { costs: result.costs, error: result.error };
-}
+const { startDate, endDate } = getDateRange(timeframe);
+
+// Health and usage are independent, so fetch them together.
+// The model-scoped history is paged newest-first, so it already contains the
+// current check - no need for the all-models /health/latest snapshot here.
+const [history, usage] = await Promise.all([
+  model && !passThrough
+    ? getModelHealthHistory(windowStartIso(HEALTH_WINDOW), model.name)
+    : undefined,
+  model
+    ? getModelCosts(model.name, startDate, endDate, passThrough?.usagePrefix)
+    : undefined,
+]);
+const health: ModelHealth | undefined =
+  history && model
+    ? summariseModelHealth(
+        history.checks,
+        [model.name],
+        healthKeys,
+        healthDef.granularity,
+      ).models[0]
+    : undefined;
+const healthError = history?.error;
 
 // Estimated impact of a typical request, so models can be compared. Resolved
 // from this model's config alone, no usage needed (ADR-0005). One line per
@@ -119,6 +127,18 @@ const reference = impact?.ok
               <p class="govuk-body">{model.description}</p>
 
               <h2 class="govuk-heading-m">Status</h2>
+              {passThrough && (
+                <InsetText>
+                  Served through the gateway's{" "}
+                  <code class="app-code">{passThrough.route}</code> pass-through
+                  rather than as a model in the list, so it has no health
+                  status. See{" "}
+                  <a class="govuk-link" href={model.uri} rel="noopener">
+                    the {model.provider} API reference
+                  </a>{" "}
+                  for how to call it.
+                </InsetText>
+              )}
               {healthError && (
                 <InsetText>
                   Health data is currently unavailable ({healthError}).
@@ -179,156 +199,207 @@ const reference = impact?.ok
                   <SummaryListKey>mode</SummaryListKey>
                   <SummaryListValue>{model.mode}</SummaryListValue>
                 </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>location</SummaryListKey>
-                  <SummaryListValue>{model.location}</SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>lab</SummaryListKey>
-                  <SummaryListValue>{model.lab}</SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>country of origin</SummaryListKey>
-                  <SummaryListValue>{model.country_of_origin}</SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>open weight</SummaryListKey>
-                  <SummaryListValue>
-                    {model.open_weight ? "yes" : "no"}
-                  </SummaryListValue>
-                </SummaryListRow>
-                {model.parameters && (
-                  <SummaryListRow>
-                    <SummaryListKey>parameters</SummaryListKey>
-                    <SummaryListValue>
-                      {formatParameters(model.parameters)}
-                    </SummaryListValue>
-                  </SummaryListRow>
-                )}
-                <SummaryListRow>
-                  <SummaryListKey>
-                    impact per {REFERENCE_OUTPUT_TOKENS.toLocaleString("en-GB")}{" "}
-                    output tokens
-                  </SummaryListKey>
-                  <SummaryListValue>
-                    {impact?.ok && reference ? (
-                      <Fragment>
-                        <ul class="govuk-list govuk-!-margin-bottom-1">
-                          <li>
-                            Carbon: {formatRange(reference.gwpKg, formatCo2)}
-                          </li>
-                          <li>
-                            Electricity:{" "}
-                            {formatRange(reference.energyKwh, formatEnergy)}
-                          </li>
-                          {/* No water line at all when ecologits has no figure, rather than a false "0 mL". */}
-                          {reference.waterL && (
+                {tool ? (
+                  <Fragment>
+                    <SummaryListRow>
+                      <SummaryListKey>route</SummaryListKey>
+                      <SummaryListValue>
+                        <code class="app-code">{tool.route}</code>
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>endpoints</SummaryListKey>
+                      <SummaryListValue>
+                        <ul class="govuk-list govuk-!-margin-bottom-0">
+                          {tool.endpoints?.map((e) => (
                             <li>
-                              Water:{" "}
-                              {formatRange(reference.waterL, formatWater)}
+                              <code class="app-code">{e}</code>
                             </li>
-                          )}
+                          ))}
                         </ul>
-                        <span class="govuk-body-s app-impact-note">
-                          Modelled by ecologits{" "}
-                          {impactSourceLabel(impact.model)} on the{" "}
-                          {zoneLabel(impact.model.zone)}, not measured.
-                          {impact.model.parameters?.source && (
-                            <Fragment>
-                              {" "}
-                              <a
-                                class="govuk-link"
-                                href={impact.model.parameters.source}
-                                rel="noopener"
-                              >
-                                Size source
-                              </a>
-                            </Fragment>
-                          )}
-                        </span>
-                      </Fragment>
-                    ) : impact && !impact.ok ? (
-                      unresolvedLabel(impact.reason)
-                    ) : null}
-                  </SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>uri</SummaryListKey>
-                  <SummaryListValue>
-                    <a href={model.uri} class="govuk-link">
-                      {model.uri}
-                    </a>
-                  </SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>supports vision</SummaryListKey>
-                  <SummaryListValue>
-                    {model.supports_vision ? "yes" : "no"}
-                  </SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>supports function calling</SummaryListKey>
-                  <SummaryListValue>
-                    {model.supports_function_calling ? "yes" : "no"}
-                  </SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>supports audio input</SummaryListKey>
-                  <SummaryListValue>
-                    {model.supports_audio_input ? "yes" : "no"}
-                  </SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>supports reasoning</SummaryListKey>
-                  <SummaryListValue>
-                    {model.supports_reasoning ? "yes" : "no"}
-                  </SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>max input tokens</SummaryListKey>
-                  <SummaryListValue>
-                    {model.max_input_tokens ?? "unknown"}
-                  </SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>max output tokens</SummaryListKey>
-                  <SummaryListValue>
-                    {model.max_output_tokens ?? "unknown"}
-                  </SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>tokens per minute limit</SummaryListKey>
-                  <SummaryListValue>
-                    {model.tpm !== undefined
-                      ? `${trimCompact(formatTokens(model.tpm))} tokens/min`
-                      : "no limit"}
-                  </SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>requests per minute limit</SummaryListKey>
-                  <SummaryListValue>
-                    {model.rpm !== undefined
-                      ? `${trimCompact(formatRequests(model.rpm))} requests/min`
-                      : "no limit"}
-                  </SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>cost per million input token</SummaryListKey>
-                  <SummaryListValue>
-                    {model.input_cost_per_token !== undefined
-                      ? (model.input_cost_per_token * 1e6).toFixed(2)
-                      : "unknown"}
-                  </SummaryListValue>
-                </SummaryListRow>
-                <SummaryListRow>
-                  <SummaryListKey>cost per million output token</SummaryListKey>
-                  <SummaryListValue>
-                    {model.output_cost_per_token !== undefined
-                      ? (model.output_cost_per_token * 1e6).toFixed(2)
-                      : "unknown"}
-                  </SummaryListValue>
-                </SummaryListRow>
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>uri</SummaryListKey>
+                      <SummaryListValue>
+                        <a href={model.uri} class="govuk-link">
+                          {model.uri}
+                        </a>
+                      </SummaryListValue>
+                    </SummaryListRow>
+                  </Fragment>
+                ) : (
+                  <Fragment>
+                    <SummaryListRow>
+                      <SummaryListKey>location</SummaryListKey>
+                      <SummaryListValue>{model.location}</SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>lab</SummaryListKey>
+                      <SummaryListValue>{model.lab}</SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>country of origin</SummaryListKey>
+                      <SummaryListValue>
+                        {model.country_of_origin}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>open weight</SummaryListKey>
+                      <SummaryListValue>
+                        {model.open_weight ? "yes" : "no"}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    {model.parameters && (
+                      <SummaryListRow>
+                        <SummaryListKey>parameters</SummaryListKey>
+                        <SummaryListValue>
+                          {formatParameters(model.parameters)}
+                        </SummaryListValue>
+                      </SummaryListRow>
+                    )}
+                    <SummaryListRow>
+                      <SummaryListKey>
+                        impact per{" "}
+                        {REFERENCE_OUTPUT_TOKENS.toLocaleString("en-GB")} output
+                        tokens
+                      </SummaryListKey>
+                      <SummaryListValue>
+                        {impact?.ok && reference ? (
+                          <Fragment>
+                            <ul class="govuk-list govuk-!-margin-bottom-1">
+                              <li>
+                                Carbon:{" "}
+                                {formatRange(reference.gwpKg, formatCo2)}
+                              </li>
+                              <li>
+                                Electricity:{" "}
+                                {formatRange(reference.energyKwh, formatEnergy)}
+                              </li>
+                              {/* No water line at all when ecologits has no figure, rather than a false "0 mL". */}
+                              {reference.waterL && (
+                                <li>
+                                  Water:{" "}
+                                  {formatRange(reference.waterL, formatWater)}
+                                </li>
+                              )}
+                            </ul>
+                            <span class="govuk-body-s app-impact-note">
+                              Modelled by ecologits{" "}
+                              {impactSourceLabel(impact.model)} on the{" "}
+                              {zoneLabel(impact.model.zone)}, not measured.
+                              {impact.model.parameters?.source && (
+                                <Fragment>
+                                  {" "}
+                                  <a
+                                    class="govuk-link"
+                                    href={impact.model.parameters.source}
+                                    rel="noopener"
+                                  >
+                                    Size source
+                                  </a>
+                                </Fragment>
+                              )}
+                            </span>
+                          </Fragment>
+                        ) : impact && !impact.ok ? (
+                          unresolvedLabel(impact.reason)
+                        ) : null}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>uri</SummaryListKey>
+                      <SummaryListValue>
+                        <a href={model.uri} class="govuk-link">
+                          {model.uri}
+                        </a>
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>supports vision</SummaryListKey>
+                      <SummaryListValue>
+                        {model.supports_vision ? "yes" : "no"}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>supports function calling</SummaryListKey>
+                      <SummaryListValue>
+                        {model.supports_function_calling ? "yes" : "no"}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>supports audio input</SummaryListKey>
+                      <SummaryListValue>
+                        {model.supports_audio_input ? "yes" : "no"}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>supports reasoning</SummaryListKey>
+                      <SummaryListValue>
+                        {model.supports_reasoning ? "yes" : "no"}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>max input tokens</SummaryListKey>
+                      <SummaryListValue>
+                        {model.max_input_tokens ?? "unknown"}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>max output tokens</SummaryListKey>
+                      <SummaryListValue>
+                        {model.max_output_tokens ?? "unknown"}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>tokens per minute limit</SummaryListKey>
+                      <SummaryListValue>
+                        {model.tpm !== undefined
+                          ? `${trimCompact(formatTokens(model.tpm))} tokens/min`
+                          : "no limit"}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>requests per minute limit</SummaryListKey>
+                      <SummaryListValue>
+                        {model.rpm !== undefined
+                          ? `${trimCompact(formatRequests(model.rpm))} requests/min`
+                          : "no limit"}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>
+                        cost per million input token
+                      </SummaryListKey>
+                      <SummaryListValue>
+                        {model.input_cost_per_token !== undefined
+                          ? formatPerMillion(model.input_cost_per_token)
+                          : "unknown"}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                    <SummaryListRow>
+                      <SummaryListKey>
+                        cost per million output token
+                      </SummaryListKey>
+                      <SummaryListValue>
+                        {model.output_cost_per_token !== undefined
+                          ? formatPerMillion(model.output_cost_per_token)
+                          : "unknown"}
+                      </SummaryListValue>
+                    </SummaryListRow>
+                  </Fragment>
+                )}
               </SummaryList>
+              {tool?.example && (
+                <Fragment>
+                  <h2 class="govuk-heading-m">How to call it</h2>
+                  <p class="govuk-body">
+                    Send requests to the gateway with your API key; the request
+                    body is the provider's own. For example:
+                  </p>
+                  <CopyableCode code={tool.example} />
+                </Fragment>
+              )}
             </Fragment>
           )}
         </div>

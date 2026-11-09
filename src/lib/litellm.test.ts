@@ -198,6 +198,28 @@ describe('litellm', () => {
 
 			expect(result).toEqual({ error: 'Model not found' });
 		});
+
+		it('returns a pass-through model without needing /v2/model/info', async () => {
+			const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}, { status: 500 }));
+			vi.stubGlobal('fetch', fetchMock);
+			const { getModel } = await import('./litellm');
+
+			const result = await getModel('jev');
+
+			expect(result.error).toBeUndefined();
+			expect(result.model?.name).toBe('jev-latest');
+			expect(fetchMock).not.toHaveBeenCalled();
+		});
+
+		it('returns a pass-through tool with its endpoints', async () => {
+			vi.stubGlobal('fetch', vi.fn());
+			const { getModel } = await import('./litellm');
+			const { isPassThrough } = await import('./passThroughModels');
+
+			const { model } = await getModel('tavily');
+
+			expect(model && isPassThrough(model) && model.passThrough.endpoints).toContain('/tavily/search');
+		});
 	});
 
 	describe('getCosts', () => {
@@ -694,6 +716,78 @@ describe('litellm', () => {
 			await Promise.all([getCosts('2024-05-27', '2024-06-02'), getCosts('2024-05-27', '2024-06-02')]);
 
 			expect(activityCalls(fetchMock)).toHaveLength(1);
+		});
+	});
+
+	describe('getModelCosts for a pass-through model', () => {
+		it("matches Jev's typesafe/jev-* model groups by prefix, joined to team names", async () => {
+			const fetchMock = vi.fn((url: string | URL) => {
+				const path = new URL(url).pathname;
+				if (path === '/v2/team/list') {
+					return Promise.resolve(jsonResponse({ teams: [{ team_id: 'team-a', team_alias: 'Team Alpha' }] }));
+				}
+				return Promise.resolve(
+					jsonResponse({
+						results: [
+							{
+								date: '2024-06-01',
+								breakdown: {
+									model_groups: {
+										'gpt-4': {
+											api_key_breakdown: {
+												k1: { metrics: { spend: 5, total_tokens: 50 }, metadata: { key_alias: 'a', team_id: 'team-a' } },
+											},
+										},
+										// The versioned name TypeSafe reports, plus the bare alias.
+										'typesafe/jev-1.13.0': {
+											api_key_breakdown: {
+												k2: { metrics: { spend: 2, total_tokens: 20 }, metadata: { key_alias: 'b', team_id: 'team-a' } },
+											},
+										},
+										'typesafe/jev-latest': {
+											api_key_breakdown: {
+												k3: { metrics: { spend: 1, total_tokens: 10 }, metadata: { key_alias: 'c', team_id: '' } },
+											},
+										},
+										// Another TypeSafe model is not Jev.
+										'typesafe/other-1.0.0': {
+											api_key_breakdown: {
+												k4: { metrics: { spend: 9, total_tokens: 90 }, metadata: { key_alias: 'd', team_id: '' } },
+											},
+										},
+									},
+								},
+							},
+						],
+					})
+				);
+			});
+			vi.stubGlobal('fetch', fetchMock);
+			const { getModelCosts } = await import('./litellm');
+
+			const result = await getModelCosts('jev-latest', '2024-05-27', '2024-06-02', 'typesafe/jev-');
+
+			expect(result.error).toBeUndefined();
+			expect(result.costs.map((c) => c.model_name).sort()).toEqual(['typesafe/jev-1.13.0', 'typesafe/jev-latest']);
+			expect(result.costs.map((c) => c.spend).reduce((a, b) => a + b, 0)).toBe(3);
+			const byToken = Object.fromEntries(result.costs.map((c) => [c.key_token, c.team_name]));
+			expect(byToken).toEqual({ k2: 'Team Alpha', k3: '' });
+
+			// Without a prefix it's an exact-name lookup, cached separately.
+			const exact = await getModelCosts('typesafe/jev-latest', '2024-05-27', '2024-06-02');
+			expect(exact.costs.map((c) => c.key_token)).toEqual(['k3']);
+		});
+
+		it('returns an error when the proxy responds non-200', async () => {
+			const fetchMock = vi.fn((url: string | URL) =>
+				Promise.resolve(new URL(url).pathname === '/v2/team/list' ? jsonResponse({ teams: [] }) : jsonResponse({}, { status: 500 }))
+			);
+			vi.stubGlobal('fetch', fetchMock);
+			const { getModelCosts } = await import('./litellm');
+
+			const result = await getModelCosts('jev-latest', '2024-05-27', '2024-06-02', 'typesafe/jev-');
+
+			expect(result).toEqual({ costs: [], error: 'LiteLLM returned 500' });
 		});
 	});
 
