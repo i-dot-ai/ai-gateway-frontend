@@ -19,10 +19,11 @@
   },
   "dependencies": {
     "@astrojs/node": "^11.1.11",
+    "@astrojs/solid-js": "^7.1.2",
     "@ecologits/ecologits.js": "3.0.0",
     "@fontsource/inter": "^5.3.0",
-    "@i-dot-ai-npm/component-library-astro": "^0.0.13",
-    "@i-dot-ai-npm/component-library-frontend": "^0.0.19",
+    "@i-dot-ai-npm/component-library-frontend": "^0.0.21",
+    "@i-dot-ai-npm/component-library-solid": "^0.0.15",
     "@i-dot-ai-npm/utilities-auth": "^1.0.1",
     "@i-dot-ai-npm/utilities-observability": "^1.0.1",
     "astro": "^7.4.7",
@@ -31,6 +32,7 @@
     "govuk-frontend": "^6.6.0",
     "hyparquet": "^1.32.0",
     "posthog-node": "^5.63.0",
+    "solid-js": "^1.9.18",
     "zod": "4.6.7"
   },
   "overrides": {

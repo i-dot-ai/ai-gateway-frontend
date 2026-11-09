@@ -1,6 +1,7 @@
 // @ts-check
 import node from '@astrojs/node';
 import { defineConfig } from 'astro/config';
+import solid from '@astrojs/solid-js';
 
 // https://astro.build/config
 export default defineConfig({
@@ -11,6 +12,7 @@ export default defineConfig({
 	adapter: node({
 		mode: 'standalone',
 	}),
+	integrations: [solid()],
 	// Trust the ALB's forwarded headers for all subdomains
 	security: {
 		allowedDomains: [
