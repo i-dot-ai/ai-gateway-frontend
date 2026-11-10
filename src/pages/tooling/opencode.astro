@@ -255,18 +255,25 @@ import { InsetText, WarningText } from "@i-dot-ai-npm/component-library-solid";
   </h2>
 
   <p class="govuk-body">
-    If you use the OpenCode desktop app, make sure you have installed{" "}
-    <strong>v2</strong> of the app. Older v1 versions do not understand the
-    configuration format above, so your AI Gateway models will not appear.
+    You can{" "}
+    <a class="govuk-link" href="https://opencode.ai/product">
+      download the OpenCode desktop app
+    </a>{" "}
+    to use OpenCode with a GUI interface.
   </p>
 
   <p class="govuk-body">
-    The desktop app, terminal and VS Code extension all connect to the same
-    OpenCode service and share credentials. So you do not add your key in the
-    desktop app — instead, connect your key once through the OpenCode CLI (using{" "}
-    <code class="app-code">/connect</code>, as described above), and the desktop
-    app will pick it up automatically.
+    You still need to follow the instructions to{" "}
+    <a class="govuk-link" href="#install-opencode">
+      install OpenCode and add your AI Gateway key
+    </a>{" "}
+    to connect the Gateway to the app.
   </p>
+
+  <div class="govuk-inset-text">
+    Select 'About OpenCode' in the OpenCode menu to make sure you are using
+    version 2.x of the app.
+  </div>
 
   <h2 class="govuk-heading-l" id="connect-to-vs-code">
     Connect OpenCode to VS Code
