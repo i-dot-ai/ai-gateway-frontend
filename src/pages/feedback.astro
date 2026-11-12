@@ -14,19 +14,19 @@ import {
   Button,
 } from "@i-dot-ai-npm/component-library-solid";
 import Input from "../components/Input.astro";
+import { readAndClearFlash } from "../lib/flash";
 import { safePath } from "../lib/safePath";
 
 // Get pre-filled values from URL params
 const pageUrl = safePath(Astro.url.searchParams.get("url"));
 const initialResponse = Astro.url.searchParams.get("response") || "";
 
-// Get any flash messages from form submission
-const successMessage = await Astro.session?.get("feedback-success");
-const errorMessage = await Astro.session?.get("feedback-error");
-
-// Clear flash messages after reading
-if (successMessage) await Astro.session?.delete("feedback-success");
-if (errorMessage) await Astro.session?.delete("feedback-error");
+// Get any flash messages from form submission, clearing them once read
+const successMessage = await readAndClearFlash(
+  Astro.session,
+  "feedback-success",
+);
+const errorMessage = await readAndClearFlash(Astro.session, "feedback-error");
 ---
 
 <GovukLayout title="Give feedback">

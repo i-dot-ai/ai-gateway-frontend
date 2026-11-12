@@ -9,9 +9,10 @@ import { logger } from './logging';
 import { PASS_THROUGH_MODELS } from './passThroughModels';
 import { shiftDate, todayUtc } from './usage';
 
-export { logger };
-
 export const REQUEST_TIMEOUT_MS = 5000;
+
+/** The key LiteLLM's own background health checks run under; its cost rows are filtered out. */
+export const HEALTH_CHECK_KEY_TOKEN = "litellm-internal-health-check";
 
 export interface LitellmConfig {
 	baseUrl: string;
@@ -53,6 +54,69 @@ export function apiUrl(config: LitellmConfig, path: string, params?: Record<stri
 /** The message used for every `{ error }` result when a fetch throws rather than resolving with a response. */
 export function unknownErrorMessage(e: unknown): string {
 	return e instanceof Error ? e.message : "Unknown error contacting LiteLLM";
+}
+
+export interface LitellmResponse {
+	/** HTTP status, or 0 when no response was received (missing config, network failure, timeout). */
+	status: number;
+	/** The parsed JSON body, or null if it wasn't JSON. Present on HTTP errors too. */
+	body: any;
+	/** Set when the call failed; absent means `body` is usable. */
+	error?: string;
+}
+
+/**
+ * An authenticated call to the LiteLLM proxy, returning `{ error }` instead of
+ * throwing: a missing config, a network failure or timeout, a non-2xx status,
+ * or a body that fails `expect` all become an error, so callers only branch on
+ * `error`. Passing `json` sends it as a POST body. HTTP and network failures
+ * are logged here once, with the path; `log` adds context (user, email, ...).
+ * `tolerate` names a status that is not a failure (e.g. 404 on delete): no
+ * error is set and nothing is logged, so the caller can read `status`.
+ */
+export async function litellmFetch(
+	path: string,
+	opts: {
+		params?: Record<string, string>;
+		json?: unknown;
+		timeoutMs?: number;
+		expect?: (body: any) => boolean;
+		tolerate?: number;
+		log?: Record<string, unknown>;
+	} = {},
+): Promise<LitellmResponse> {
+	const { config, error: configError } = getLitellmConfig();
+	if (!config) {
+		return { status: 0, body: null, error: configError };
+	}
+
+	const headers: Record<string, string> = { Authorization: `Bearer ${config.apiKey}` };
+	if (opts.json !== undefined) headers["Content-Type"] = "application/json";
+
+	try {
+		const response = await fetch(apiUrl(config, path, opts.params), {
+			...(opts.json !== undefined && { method: "POST", body: JSON.stringify(opts.json) }),
+			headers,
+			signal: AbortSignal.timeout(opts.timeoutMs ?? REQUEST_TIMEOUT_MS),
+		});
+		const body = await response.json().catch(() => null);
+
+		if (opts.tolerate !== undefined && response.status === opts.tolerate) {
+			return { status: response.status, body };
+		}
+		if (!response.ok) {
+			logger.error({ path, status: response.status, ...opts.log }, `LiteLLM returned ${response.status}`);
+			return { status: response.status, body, error: `LiteLLM returned ${response.status}` };
+		}
+		if (opts.expect && !opts.expect(body)) {
+			logger.error({ path, status: response.status, ...opts.log }, "LiteLLM returned an unexpected response");
+			return { status: response.status, body, error: "LiteLLM returned an unexpected response" };
+		}
+		return { status: response.status, body };
+	} catch (e) {
+		logger.error({ err: e, path, ...opts.log }, "Unknown error contacting LiteLLM");
+		return { status: 0, body: null, error: unknownErrorMessage(e) };
+	}
 }
 
 /**
@@ -211,12 +275,6 @@ export interface LitellmModel {
 	/** Size from the model card. Set for every open-weight model; closed models omit it. See config.yml's header. */
 	parameters?: ModelParameters;
 	/**
-	 * Which Claude Code model tier this model should be pinned to - only set
-	 * for a handful of Bedrock Claude models. See config.yml's comments.
-	 * Not currently consumed by this app; retained for tooling elsewhere.
-	 */
-	claude_tier?: 'opus' | 'sonnet' | 'haiku';
-	/**
 	 * The ecologits registry entry ("provider/name") this closed generation
 	 * model maps to. Set on every closed generation model; open-weight models
 	 * use `parameters` instead. See impact.ts and ADR-0005.
@@ -261,39 +319,24 @@ export function toLitellmModel(r: any): LitellmModel {
 		lab: r.model_info.lab,
 		open_weight: r.model_info.open_weight,
 		parameters: r.model_info.parameters,
-		claude_tier: r.model_info.claude_tier,
 		impact_model: r.model_info.impact_model,
 		impact_zone: r.model_info.impact_zone,
 	};
 }
 
 async function getModels(page: number = 1): Promise<LitellmModelList> {
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) {
-		return { models: [], error: configError };
+	const { body, error } = await litellmFetch("/v2/model/info", {
+		params: { page: String(page) },
+		expect: (b) => Boolean(b?.data),
+	});
+	if (error !== undefined) {
+		return { models: [], error };
 	}
 
-	try {
-		const response = await fetch(apiUrl(config, '/v2/model/info', { page: String(page) }), {
-			headers: { Authorization: `Bearer ${config.apiKey}` },
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		});
-
-		const body = await response.json().catch(() => null);
-
-		if (!response.ok || !body?.data) {
-			logger.error({ status: response.status }, `LiteLLM returned ${response.status}`);
-			return { models: [], error: `LiteLLM returned ${response.status}` };
-		}
-
-		return {
-			models: body.data.map(toLitellmModel),
-			next: body.current_page < body.total_pages ? body.current_page + 1 : undefined,
-		};
-	} catch (e) {
-		logger.error({ err: e }, 'Unknown error contacting LiteLLM');
-		return { models: [], error: unknownErrorMessage(e) };
-	}
+	return {
+		models: body.data.map(toLitellmModel),
+		next: body.current_page < body.total_pages ? body.current_page + 1 : undefined,
+	};
 }
 
 type ModelCapabilityFilter = Partial<Pick<LitellmModel, "supports_vision" | "supports_reasoning" | "provider">>;
@@ -370,36 +413,22 @@ export interface LitellmTeamList {
 }
 
 async function fetchTeams(): Promise<LitellmTeamList> {
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) {
-		return { teams: [], error: configError };
+	// v2, not /team/list: it supports the alias filter litellmKeys.ts's
+	// team picker needs. page_size 100 covers every team in one page.
+	const { body, error } = await litellmFetch("/v2/team/list", {
+		params: { page_size: "100" },
+		expect: (b) => Array.isArray(b?.teams),
+	});
+	if (error !== undefined) {
+		return { teams: [], error };
 	}
 
-	try {
-		// v2, not /team/list: it supports the alias filter litellmKeys.ts's
-		// team picker needs. page_size 100 covers every team in one page.
-		const response = await fetch(apiUrl(config, "/v2/team/list", { page_size: "100" }), {
-			headers: { Authorization: `Bearer ${config.apiKey}` },
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		});
-
-		const body = await response.json().catch(() => null);
-
-		if (!response.ok || !Array.isArray(body?.teams)) {
-			logger.error({ status: response.status }, `LiteLLM returned ${response.status}`);
-			return { teams: [], error: `LiteLLM returned ${response.status}` };
-		}
-
-		return {
-			teams: body.teams.map((t: any) => ({
-				id: t.team_id,
-				name: t.team_alias || t.team_id,
-			})),
-		};
-	} catch (e) {
-		logger.error({ err: e }, 'Unknown error contacting LiteLLM');
-		return { teams: [], error: unknownErrorMessage(e) };
-	}
+	return {
+		teams: body.teams.map((t: any) => ({
+			id: t.team_id,
+			name: t.team_alias || t.team_id,
+		})),
+	};
 }
 
 // Team names change about as often as team membership does - rarely - so
@@ -407,11 +436,7 @@ async function fetchTeams(): Promise<LitellmTeamList> {
 // avoids a /team/list round trip on every cost lookup.
 const TEAMS_CACHE_TTL_MS = 5 * 60 * 1000;
 
-const fetchTeamsCached = cachedFetcher(TEAMS_CACHE_TTL_MS, fetchTeams);
-
-export async function getTeams(): Promise<LitellmTeamList> {
-	return fetchTeamsCached();
-}
+export const getTeams = cachedFetcher(TEAMS_CACHE_TTL_MS, fetchTeams);
 
 export interface KeyUserMap {
 	/** key hash token -> owning user_id, only for keys that have one. */
@@ -429,50 +454,28 @@ export interface KeyUserMap {
  * 100, so walk pages until total_pages is reached.
  */
 async function fetchKeyUserMap(): Promise<KeyUserMap> {
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) {
-		return { userByToken: new Map(), error: configError };
-	}
-
 	const userByToken = new Map<string, string>();
-	try {
-		for (let page = 1; ; page++) {
-			const response = await fetch(
-				apiUrl(config, "/key/list", {
-					page: String(page),
-					size: "100",
-					return_full_object: "true",
-					include_team_keys: "true",
-				}),
-				{
-					headers: { Authorization: `Bearer ${config.apiKey}` },
-					signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-				},
-			);
-
-			const body = await response.json().catch(() => null);
-
-			if (!response.ok || !Array.isArray(body?.keys)) {
-				logger.error({ status: response.status }, `LiteLLM returned ${response.status}`);
-				return { userByToken: new Map(), error: `LiteLLM returned ${response.status}` };
-			}
-
-			for (const key of body.keys as Array<any>) {
-				// return_full_object gives objects; guard for the token-string shape too.
-				const token: string | undefined = typeof key === "string" ? key : key?.token;
-				const userId: string | null = typeof key === "object" ? (key?.user_id ?? null) : null;
-				if (token && userId) userByToken.set(token, userId);
-			}
-
-			const totalPages: number = body.total_pages ?? page;
-			if (page >= totalPages || body.keys.length === 0) break;
+	for (let page = 1; ; page++) {
+		const { body, error } = await litellmFetch("/key/list", {
+			params: { page: String(page), size: "100", return_full_object: "true", include_team_keys: "true" },
+			expect: (b) => Array.isArray(b?.keys),
+		});
+		if (error !== undefined) {
+			return { userByToken: new Map(), error };
 		}
 
-		return { userByToken };
-	} catch (e) {
-		logger.error({ err: e }, 'Unknown error contacting LiteLLM');
-		return { userByToken: new Map(), error: unknownErrorMessage(e) };
+		for (const key of body.keys as Array<any>) {
+			// return_full_object gives objects; guard for the token-string shape too.
+			const token: string | undefined = typeof key === "string" ? key : key?.token;
+			const userId: string | null = typeof key === "object" ? (key?.user_id ?? null) : null;
+			if (token && userId) userByToken.set(token, userId);
+		}
+
+		const totalPages: number = body.total_pages ?? page;
+		if (page >= totalPages || body.keys.length === 0) break;
 	}
+
+	return { userByToken };
 }
 
 // Key ownership changes only when keys are created/deleted/reassigned, far less
@@ -563,11 +566,6 @@ interface CostBlock {
 const PLATFORM_COSTS_REQUEST_TIMEOUT_MS = 60_000;
 
 async function fetchCostBlock(startDate: string, endDate: string, userId?: string): Promise<CostBlock> {
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) {
-		return { costs: [], providerCosts: [], error: configError };
-	}
-
 	// Scoping by user_id makes LiteLLM aggregate only that user's own keys
 	// server-side - the individual (home) view needs nothing more, and it turns
 	// a whole-platform scan (megabytes, every team's keys) into a small, fast
@@ -576,69 +574,65 @@ async function fetchCostBlock(startDate: string, endDate: string, userId?: strin
 	if (userId) {
 		params.user_id = userId;
 	}
-	const url = apiUrl(config, "/user/daily/activity/aggregated", params);
 
-	try {
-		const startedAt = Date.now();
-		const response = await fetch(url, {
-			headers: { Authorization: `Bearer ${config.apiKey}` },
-			signal: AbortSignal.timeout(userId ? REQUEST_TIMEOUT_MS : PLATFORM_COSTS_REQUEST_TIMEOUT_MS),
-		});
-
-		const body = await response.json().catch(() => null);
-		logger.info({ startDate, endDate, scoped: Boolean(userId), ms: Date.now() - startedAt }, 'Fetched costs week');
-
-		if (!response.ok || !body?.results) {
-			logger.error({ status: response.status }, `LiteLLM returned ${response.status}`);
-			return { costs: [], providerCosts: [], error: `LiteLLM returned ${response.status}` };
-		}
-
-		const costs: Array<RawCost> = [];
-		const providerCosts: Array<LitellmProviderCost> = [];
-		for (const result of body.results) {
-			const date = result.date;
-			for (const [modelName, model] of Object.entries(result.breakdown.models) as Array<[string, any]>) {
-				for (const [token, subValue] of Object.entries(model.api_key_breakdown) as Array<[string, any]>) {
-					costs.push({
-						date,
-						model_name: modelName,
-						spend: subValue.metrics.spend,
-						total_tokens: subValue.metrics.total_tokens,
-						prompt_tokens: subValue.metrics.prompt_tokens ?? 0,
-						completion_tokens: subValue.metrics.completion_tokens ?? 0,
-						cache_read_input_tokens: subValue.metrics.cache_read_input_tokens ?? 0,
-						cache_creation_input_tokens: subValue.metrics.cache_creation_input_tokens ?? 0,
-						api_requests: subValue.metrics.api_requests ?? 0,
-						failed_requests: subValue.metrics.failed_requests ?? 0,
-						key_alias: subValue.metadata.key_alias,
-						key_token: token,
-						team_id: subValue.metadata.team_id ?? "",
-					});
-				}
-			}
-			// The provider cut of the same usage. Older days may predate the
-			// providers breakdown, so treat it as optional rather than assuming
-			// every result carries one.
-			for (const [providerName, provider] of Object.entries(result.breakdown.providers ?? {}) as Array<[string, any]>) {
-				for (const subValue of Object.values(provider.api_key_breakdown ?? {}) as Array<any>) {
-					providerCosts.push({
-						date,
-						provider: providerName,
-						spend: subValue.metrics.spend,
-						total_tokens: subValue.metrics.total_tokens,
-						api_requests: subValue.metrics.api_requests ?? 0,
-						failed_requests: subValue.metrics.failed_requests ?? 0,
-						key_alias: subValue.metadata.key_alias,
-					});
-				}
-			}
-		}
-
-		return { costs, providerCosts };
-	} catch (e) {
-		logger.error({ err: e }, 'Unknown error contacting LiteLLM');
-		return { costs: [], providerCosts: [], error: unknownErrorMessage(e) };
+	const startedAt = Date.now();
+	const { body, error } = await litellmFetch("/user/daily/activity/aggregated", {
+		params,
+		timeoutMs: userId ? REQUEST_TIMEOUT_MS : PLATFORM_COSTS_REQUEST_TIMEOUT_MS,
+		expect: (b) => Boolean(b?.results),
+	});
+	logger.info({ startDate, endDate, scoped: Boolean(userId), ms: Date.now() - startedAt }, 'Fetched costs week');
+	if (error !== undefined) {
+		return { costs: [], providerCosts: [], error };
 	}
+
+	const costs: Array<RawCost> = [];
+	const providerCosts: Array<LitellmProviderCost> = [];
+	for (const result of body.results) {
+		const date = result.date;
+		for (const [modelName, model] of Object.entries(result.breakdown.models) as Array<[string, any]>) {
+			for (const [token, subValue] of Object.entries(model.api_key_breakdown) as Array<[string, any]>) {
+				costs.push(toRawCost(date, modelName, token, subValue));
+			}
+		}
+		// The provider cut of the same usage. Older days may predate the
+		// providers breakdown, so treat it as optional rather than assuming
+		// every result carries one.
+		for (const [providerName, provider] of Object.entries(result.breakdown.providers ?? {}) as Array<[string, any]>) {
+			for (const subValue of Object.values(provider.api_key_breakdown ?? {}) as Array<any>) {
+				providerCosts.push({
+					date,
+					provider: providerName,
+					spend: subValue.metrics.spend,
+					total_tokens: subValue.metrics.total_tokens,
+					api_requests: subValue.metrics.api_requests ?? 0,
+					failed_requests: subValue.metrics.failed_requests ?? 0,
+					key_alias: subValue.metadata.key_alias,
+				});
+			}
+		}
+	}
+
+	return { costs, providerCosts };
+}
+
+/** One api_key_breakdown entry as a cost row; shared by the model and model-group breakdowns. */
+function toRawCost(date: string, modelName: string, token: string, subValue: any): RawCost {
+	return {
+		date,
+		model_name: modelName,
+		spend: subValue.metrics.spend,
+		total_tokens: subValue.metrics.total_tokens,
+		prompt_tokens: subValue.metrics.prompt_tokens ?? 0,
+		completion_tokens: subValue.metrics.completion_tokens ?? 0,
+		cache_read_input_tokens: subValue.metrics.cache_read_input_tokens ?? 0,
+		cache_creation_input_tokens: subValue.metrics.cache_creation_input_tokens ?? 0,
+		api_requests: subValue.metrics.api_requests ?? 0,
+		failed_requests: subValue.metrics.failed_requests ?? 0,
+		key_alias: subValue.metadata.key_alias ?? "",
+		key_token: token,
+		team_id: subValue.metadata.team_id ?? "",
+	};
 }
 
 // Ranges are fetched as fixed Monday-to-Sunday weeks, cached per week, so
@@ -742,7 +736,7 @@ export async function getCosts(startDate: string, endDate: string, userId?: stri
 			stopped ??= COSTS_DEADLINE_ERROR;
 			return [{ costs: [], providerCosts: [], error: COSTS_DEADLINE_ERROR }];
 		}),
-		fetchTeamsCached(),
+		getTeams(),
 		fetchKeyUserMapCached(),
 	]);
 
@@ -793,7 +787,7 @@ export async function getModelCosts(
 	const match = usagePrefix ? `prefix:${usagePrefix}` : `exact:${modelName}`;
 	const [result, teamsResult] = await Promise.all([
 		getModelCostsCached(`${match}|${startDate}|${endDate}`),
-		fetchTeamsCached(),
+		getTeams(),
 	]);
 	if (result.error !== undefined) {
 		return { costs: [], error: result.error };
@@ -830,65 +824,29 @@ async function fetchAggregatedGroupCosts(
 	endDate: string,
 	matches: (modelName: string) => boolean,
 ): Promise<{ costs: LitellmCost[]; error?: string }> {
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) {
-		return { costs: [], error: configError };
+	const { body, error } = await litellmFetch("/user/daily/activity/aggregated", {
+		params: { start_date: startDate, end_date: endDate },
+		timeoutMs: PLATFORM_COSTS_REQUEST_TIMEOUT_MS,
+		expect: (b) => Boolean(b?.results),
+	});
+	if (error !== undefined) {
+		return { costs: [], error };
 	}
 
-	const url = apiUrl(config, "/user/daily/activity/aggregated", {
-		start_date: startDate,
-		end_date: endDate,
-	});
+	const costs: LitellmCost[] = [];
+	for (const result of body.results) {
+		for (const [modelName, modelGroup] of Object.entries(result.breakdown?.model_groups ?? {}) as Array<[string, any]>) {
+			if (!matches(modelName)) continue;
 
-	try {
-		const response = await fetch(url, {
-			headers: { Authorization: `Bearer ${config.apiKey}` },
-			signal: AbortSignal.timeout(PLATFORM_COSTS_REQUEST_TIMEOUT_MS),
-		});
-
-		const body = await response.json().catch(() => null);
-
-		if (!response.ok || !body?.results) {
-			return { costs: [], error: `LiteLLM returned ${response.status}` };
-		}
-
-		const costs: LitellmCost[] = [];
-
-		for (const result of body.results) {
-			for (const [modelName, modelGroup] of Object.entries(result.breakdown?.model_groups ?? {}) as Array<[string, any]>) {
-				if (!matches(modelName)) continue;
-
-				// Extract per-key breakdown from api_key_breakdown
-				for (const [token, subValue] of Object.entries(modelGroup.api_key_breakdown || {}) as Array<[string, any]>) {
-					// Skip health-check key - it polls every model every 5 minutes
-					if (token === "litellm-internal-health-check") continue;
-
-					costs.push({
-						date: result.date,
-						model_name: modelName,
-						spend: subValue.metrics.spend,
-						total_tokens: subValue.metrics.total_tokens,
-						prompt_tokens: subValue.metrics.prompt_tokens ?? 0,
-						completion_tokens: subValue.metrics.completion_tokens ?? 0,
-						cache_read_input_tokens: subValue.metrics.cache_read_input_tokens ?? 0,
-						cache_creation_input_tokens: subValue.metrics.cache_creation_input_tokens ?? 0,
-						api_requests: subValue.metrics.api_requests ?? 0,
-						failed_requests: subValue.metrics.failed_requests ?? 0,
-						key_alias: subValue.metadata.key_alias ?? "",
-						key_token: token,
-						team_id: subValue.metadata.team_id ?? "",
-						user_id: null,
-						team_name: "",
-					});
-				}
+			for (const [token, subValue] of Object.entries(modelGroup.api_key_breakdown || {}) as Array<[string, any]>) {
+				// Skip health-check key - it polls every model every 5 minutes
+				if (token === HEALTH_CHECK_KEY_TOKEN) continue;
+				costs.push({ ...toRawCost(result.date, modelName, token, subValue), user_id: null, team_name: "" });
 			}
 		}
-
-		return { costs };
-	} catch (e) {
-		logger.error({ err: e }, "Failed to fetch model costs");
-		return { costs: [], error: String(e) };
 	}
+
+	return { costs };
 }
 
 // Under the platform-wide TTL with room for a slow scan, so the current week
@@ -1008,33 +966,16 @@ function extractHealthRecords(body: any): Array<{ raw: any; fallbackModel?: stri
 }
 
 async function fetchHealth(path: string, params?: Record<string, string>): Promise<LitellmHealthChecks> {
-	const { config, error: configError } = getLitellmConfig();
-	if (!config) {
-		return { checks: [], error: configError };
+	const { body, error } = await litellmFetch(path, { params });
+	if (error !== undefined) {
+		return { checks: [], error };
 	}
 
-	try {
-		const response = await fetch(apiUrl(config, path, params), {
-			headers: { Authorization: `Bearer ${config.apiKey}` },
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		});
+	const checks = extractHealthRecords(body)
+		.map(({ raw, fallbackModel }) => normaliseHealthCheck(raw, fallbackModel))
+		.filter((c): c is LitellmHealthCheck => c !== null);
 
-		const body = await response.json().catch(() => null);
-
-		if (!response.ok) {
-			logger.error({ status: response.status }, `LiteLLM returned ${response.status}`);
-			return { checks: [], error: `LiteLLM returned ${response.status}` };
-		}
-
-		const checks = extractHealthRecords(body)
-			.map(({ raw, fallbackModel }) => normaliseHealthCheck(raw, fallbackModel))
-			.filter((c): c is LitellmHealthCheck => c !== null);
-
-		return { checks };
-	} catch (e) {
-		logger.error({ err: e }, 'Unknown error contacting LiteLLM');
-		return { checks: [], error: unknownErrorMessage(e) };
-	}
+	return { checks };
 }
 
 // Background health checks only refresh every few minutes, so a short TTL keeps
@@ -1049,12 +990,8 @@ const HEALTH_CACHE_TTL_MS = 5 * 60 * 1000;
 const HEALTH_HISTORY_PAGE_SIZE = 1000;
 const HEALTH_HISTORY_MAX_RECORDS = 30000;
 
-const getModelHealthLatestCached = cachedFetcher(HEALTH_CACHE_TTL_MS, () => fetchHealth("/health/latest"));
-
 /** The most recent health check for every model. */
-export async function getModelHealthLatest(): Promise<LitellmHealthChecks> {
-	return getModelHealthLatestCached();
-}
+export const getModelHealthLatest = cachedFetcher(HEALTH_CACHE_TTL_MS, () => fetchHealth("/health/latest"));
 
 /**
  * Health-check history back to `sinceIso`. LiteLLM has no date-range filter on

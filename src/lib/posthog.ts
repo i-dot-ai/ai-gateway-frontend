@@ -2,9 +2,15 @@
  * Server-side PostHog tracking for custom events. Page views are tracked
  * client-side by posthog-js to capture referrer and UTM data.
  *
- * distinctId is a salted hash of the email rather than the email itself,
- * so PostHog never sees the raw address but can still correlate a user's
- * journey. email_domain is sent separately for org-level breakdowns.
+ * distinctId is a salted hash of the signed-in user's email rather than the
+ * email itself, so that address is never sent to PostHog but a user's journey
+ * can still be correlated. email_domain is sent separately for org-level
+ * breakdowns.
+ *
+ * Free text the user types is sent as typed, so it can contain personal data:
+ * model_search sends the search query, and page_feedback_form sends the
+ * liked/improve comments and, only if the user chose to enter one, the
+ * contact_email they asked us to follow up on.
  */
 import { createHash } from 'node:crypto';
 import { PostHog } from 'posthog-node';
@@ -105,8 +111,4 @@ export function captureModelSearch(
 
 export async function flushPosthog(): Promise<void> {
   await client?.flush();
-}
-
-export async function shutdownPosthog(): Promise<void> {
-  await client?.shutdown();
 }

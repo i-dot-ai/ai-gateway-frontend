@@ -10,7 +10,8 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { chatJson, extractModelName, type ChatMessage } from './gatewayChat';
-import { apiUrl, getLitellmConfig, logger, unknownErrorMessage, type LitellmConfig, type LitellmModel } from './litellm';
+import { apiUrl, getLitellmConfig, unknownErrorMessage, type LitellmConfig, type LitellmModel } from './litellm';
+import { logger } from './logging';
 
 /**
  * What the extraction model must return: the fields the ask prompt and

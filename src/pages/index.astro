@@ -55,7 +55,6 @@ const timeframe = parseTimeframe(
 
 let keys: Awaited<ReturnType<typeof getUserKeys>>["keys"] = [];
 let keysError: string | undefined;
-let hasAccount = false;
 let budget: UserBudget | undefined;
 let userId: string | undefined;
 
@@ -66,7 +65,6 @@ if (userEmail) {
     keysError = userIdError;
   } else if (resolvedUserId) {
     userId = resolvedUserId;
-    hasAccount = true;
     const result = await getUserKeys(resolvedUserId);
     keys = result.keys;
     keysError = result.error;

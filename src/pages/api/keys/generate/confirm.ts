@@ -50,8 +50,13 @@ export const POST: APIRoute = async ({ session, redirect }) => {
 	}
 	const existing = existingKeys.find((k) => k.alias === alias);
 	const isReplacement = !!existing;
+	let replacedKeyDeleted = false;
 	if (existing) {
-		await deleteKey(existing.token);
+		const deleted = await deleteKey(existing.token);
+		replacedKeyDeleted = deleted.ok;
+		if (!deleted.ok) {
+			logger.error({ ...logContext, userId, alias, error: deleted.error }, 'Failed to delete replaced key; it may still be valid');
+		}
 	}
 
 	const { key, error: generateError } = await generateKey({ userId, alias, teamId });
@@ -66,9 +71,8 @@ export const POST: APIRoute = async ({ session, redirect }) => {
 	session?.delete('pending-key-team-name');
 
 	session?.set('flash-generated-key', key);
-	session?.set('flash-generated-key-alias', alias);
-	session?.set('flash-generated-key-team', teamName || '');
-	session?.set('flash-generated-key-replaced', isReplacement ? 'true' : '');
+	session?.set('flash-generated-key-replaced', isReplacement && replacedKeyDeleted ? 'true' : '');
+	session?.set('flash-generated-key-undeleted', isReplacement && !replacedKeyDeleted ? 'true' : '');
 	logger.info({ ...logContext, userId, alias, isReplacement }, 'Successfully generated key');
 	return redirect('/keys/generate/show', 303);
 };

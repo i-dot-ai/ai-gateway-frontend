@@ -839,4 +839,58 @@ describe('litellm', () => {
 			expect(fetchMock).toHaveBeenCalledTimes(1);
 		});
 	});
+
+	describe('litellmFetch', () => {
+		it('sends the bearer key and params, and returns the parsed body', async () => {
+			const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: 1 }));
+			vi.stubGlobal('fetch', fetchMock);
+			const { litellmFetch } = await import('./litellm');
+
+			const result = await litellmFetch('/thing', { params: { a: 'b' } });
+
+			expect(result).toEqual({ status: 200, body: { ok: 1 } });
+			const [url, options] = fetchMock.mock.calls[0];
+			expect(String(url)).toBe('https://litellm.example.com/thing?a=b');
+			expect(options.headers.Authorization).toBe('Bearer test-key');
+			expect(options.method).toBeUndefined();
+		});
+
+		it('POSTs a JSON body', async () => {
+			const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+			vi.stubGlobal('fetch', fetchMock);
+			const { litellmFetch } = await import('./litellm');
+
+			await litellmFetch('/thing', { json: { x: 1 } });
+
+			const [, options] = fetchMock.mock.calls[0];
+			expect(options.method).toBe('POST');
+			expect(options.headers['Content-Type']).toBe('application/json');
+			expect(JSON.parse(options.body)).toEqual({ x: 1 });
+		});
+
+		it('reports a non-2xx status, a body that fails expect, a network error and missing config as errors', async () => {
+			const { litellmFetch } = await import('./litellm');
+
+			vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({}, { status: 500 })));
+			expect((await litellmFetch('/t')).error).toBe('LiteLLM returned 500');
+
+			vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ nope: true })));
+			expect((await litellmFetch('/t', { expect: (b) => Boolean(b.data) })).error).toBe(
+				'LiteLLM returned an unexpected response'
+			);
+
+			vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('boom')));
+			expect(await litellmFetch('/t')).toEqual({ status: 0, body: null, error: 'boom' });
+
+			delete process.env.LITELLM_URL;
+			expect((await litellmFetch('/t')).error).toBe('LITELLM_URL is not configured');
+		});
+
+		it('does not treat a tolerated status as an error', async () => {
+			vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({}, { status: 404 })));
+			const { litellmFetch } = await import('./litellm');
+
+			expect(await litellmFetch('/t', { tolerate: 404 })).toEqual({ status: 404, body: {} });
+		});
+	});
 });
