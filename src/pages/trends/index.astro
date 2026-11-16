@@ -51,7 +51,6 @@ import {
 import {
   formatChartDate,
   formatFailureRate,
-  formatSpan,
   formatSpendCompact,
   formatTokens,
   formatRequests,
@@ -251,10 +250,8 @@ const perUnit = { day: "per day", week: "per week", month: "per 30 days" }[
   granularity
 ];
 const labels = trends.buckets.map((b) => b.date);
-const spans = trends.buckets.map((b) => formatSpan(b));
 const series = (label: string, data: number[]) => ({
   labels,
-  spans,
   label,
   data,
 });

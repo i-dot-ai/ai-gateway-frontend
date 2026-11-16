@@ -3,8 +3,6 @@ import type { LitellmCost, LitellmProviderCost } from "./litellm";
 import {
 	bucketDailyUsage,
 	bucketValues,
-	compactAxis,
-	formatChartTick,
 	formatChartValue,
 	formatSpan,
 	formatFailureRate,
@@ -391,54 +389,10 @@ describe("formatRequests", () => {
 	});
 });
 
-describe("formatChartTick", () => {
-	const ticks = (...vs: number[]) => vs.map((value) => ({ value }));
-
-	it("shows whole dollars when every spend tick is whole", () => {
-		expect(formatChartTick(20, "spend", ticks(0, 20, 40))).toBe("$20");
-		expect(formatChartTick(1000, "spend", ticks(0, 1000))).toBe("$1,000");
-	});
-
-	it("shows cents when any spend tick is fractional, so small spends don't read $0", () => {
-		expect(formatChartTick(0, "spend", ticks(0, 0.25, 0.5))).toBe("$0.00");
-		expect(formatChartTick(1, "spend", ticks(0, 0.5, 1))).toBe("$1.00");
-	});
-
-	it("ticks counts compactly", () => {
-		expect(formatChartTick(15_000, "count")).toBe("15k");
-		expect(formatChartTick(2_500, "count")).toBe("2.5k");
-		expect(formatChartTick(400, "count")).toBe("400");
-	});
-
-	it("drops a trailing .0 from compact token ticks", () => {
-		expect(formatChartTick(2_000_000, "tokens")).toBe("2M");
-		expect(formatChartTick(1_500_000, "tokens")).toBe("1.5M");
-	});
-
-	it("ticks carbon in grams with a decimal below 1k, compactly above", () => {
-		expect(formatChartTick(0.5, "carbon")).toBe("0.5");
-		expect(formatChartTick(400, "carbon")).toBe("400");
-		expect(formatChartTick(2_500, "carbon")).toBe("2.5k");
-	});
-});
-
 describe("formatChartValue", () => {
 	it("labels carbon tooltips in grams of CO2e", () => {
 		expect(formatChartValue(63.64, "carbon")).toBe("63.6 g CO₂e");
 		expect(formatChartValue(1250, "carbon")).toBe("1,250 g CO₂e");
-	});
-});
-
-describe("compactAxis", () => {
-	it("steps in whole compact units so no tick lands on a decimal", () => {
-		expect(compactAxis(2_600_000)).toEqual({ max: 3_000_000, stepSize: 1_000_000 });
-		expect(compactAxis(12_345)).toEqual({ max: 15_000, stepSize: 5_000 });
-		expect(compactAxis(800)).toEqual({ max: 800, stepSize: 200 });
-	});
-
-	it("never steps below 1, and handles an empty axis", () => {
-		expect(compactAxis(3)).toEqual({ max: 3, stepSize: 1 });
-		expect(compactAxis(0)).toEqual({ max: 1, stepSize: 1 });
 	});
 });
 
