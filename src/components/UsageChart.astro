@@ -38,9 +38,7 @@ const intlFormat = CHART_INTL_FORMATS[valueFormat];
   data-iai-chart-format={intlFormat ? JSON.stringify(intlFormat) : undefined}
 >
   <h3 class="govuk-visually-hidden">{caption}</h3>
-  <p
-    class="iai-chart__description govuk-body-s app-muted govuk-!-margin-bottom-2"
-  >
+  <p class="iai-chart__description govuk-body-s app-muted govuk-!-margin-bottom-2">
     {yLabel}
   </p>
   <details class="govuk-details">
@@ -52,38 +50,36 @@ const intlFormat = CHART_INTL_FORMATS[valueFormat];
         <caption class="govuk-visually-hidden">{caption}</caption>
         <thead class="govuk-table__head">
           <tr class="govuk-table__row">
-            <th scope="col" class="govuk-table__header">Date</th>
-            {
-              datasets.map((d, i) => (
-                <th
-                  scope="col"
-                  class="govuk-table__header govuk-table__header--numeric"
-                  data-iai-chart-colour={colours?.[i]}
-                >
-                  {d.label}
-                </th>
-              ))
-            }
+            <th scope="col" class="govuk-table__header">
+              Date
+            </th>
+            {datasets.map((d, i) => (
+              <th
+                scope="col"
+                class="govuk-table__header govuk-table__header--numeric"
+                data-iai-chart-colour={colours?.[i]}
+              >
+                {d.label}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody class="govuk-table__body">
-          {
-            labels.map((label, row) => (
-              <tr class="govuk-table__row">
-                <th scope="row" class="govuk-table__header">
-                  {label}
-                </th>
-                {datasets.map((d) => (
-                  <td
-                    class="govuk-table__cell govuk-table__cell--numeric"
-                    data-value={d.data[row]}
-                  >
-                    {formatChartValue(d.data[row] ?? 0, valueFormat)}
-                  </td>
-                ))}
-              </tr>
-            ))
-          }
+          {labels.map((label, row) => (
+            <tr class="govuk-table__row">
+              <th scope="row" class="govuk-table__header">
+                {label}
+              </th>
+              {datasets.map((d) => (
+                <td
+                  class="govuk-table__cell govuk-table__cell--numeric"
+                  data-value={d.data[row]}
+                >
+                  {formatChartValue(d.data[row] ?? 0, valueFormat)}
+                </td>
+              ))}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

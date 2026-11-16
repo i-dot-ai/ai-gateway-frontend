@@ -44,7 +44,9 @@ const intlFormat = CHART_INTL_FORMATS[valueFormat];
       <table class="govuk-table govuk-!-margin-bottom-0">
         <thead class="govuk-table__head">
           <tr class="govuk-table__row">
-            <th scope="col" class="govuk-table__header">Date</th>
+            <th scope="col" class="govuk-table__header">
+              Date
+            </th>
             <th
               scope="col"
               class="govuk-table__header govuk-table__header--numeric"
@@ -55,21 +57,19 @@ const intlFormat = CHART_INTL_FORMATS[valueFormat];
           </tr>
         </thead>
         <tbody class="govuk-table__body">
-          {
-            chartData.labels.map((label, i) => (
-              <tr class="govuk-table__row">
-                <th scope="row" class="govuk-table__header">
-                  {formatDay(label)}
-                </th>
-                <td
-                  class="govuk-table__cell govuk-table__cell--numeric"
-                  data-value={chartData.data[i]}
-                >
-                  {formatChartValue(chartData.data[i] ?? 0, valueFormat)}
-                </td>
-              </tr>
-            ))
-          }
+          {chartData.labels.map((label, i) => (
+            <tr class="govuk-table__row">
+              <th scope="row" class="govuk-table__header">
+                {formatDay(label)}
+              </th>
+              <td
+                class="govuk-table__cell govuk-table__cell--numeric"
+                data-value={chartData.data[i]}
+              >
+                {formatChartValue(chartData.data[i] ?? 0, valueFormat)}
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
