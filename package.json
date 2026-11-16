@@ -18,21 +18,21 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@astrojs/node": "^11.1.11",
-    "@astrojs/solid-js": "^7.1.2",
+    "@astrojs/node": "^11.1.12",
+    "@astrojs/solid-js": "^7.1.5",
     "@ecologits/ecologits.js": "3.0.0",
     "@fontsource/inter": "^5.3.0",
     "@i-dot-ai-npm/component-library-frontend": "^0.0.21",
-    "@i-dot-ai-npm/component-library-solid": "^0.0.15",
+    "@i-dot-ai-npm/component-library-solid": "^0.0.16",
     "@i-dot-ai-npm/utilities-auth": "^1.0.1",
     "@i-dot-ai-npm/utilities-observability": "^1.0.1",
-    "astro": "^7.4.7",
+    "astro": "^7.4.11",
     "chart.js": "^4.6.1",
-    "dotenv": "^18.0.9",
+    "dotenv": "^18.0.10",
     "govuk-frontend": "^6.6.0",
-    "hyparquet": "^1.32.0",
-    "posthog-node": "^5.63.0",
-    "solid-js": "^1.9.18",
+    "hyparquet": "^1.33.0",
+    "posthog-node": "^5.71.0",
+    "solid-js": "^1.9.19",
     "zod": "4.6.7"
   },
   "overrides": {
@@ -50,9 +50,9 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
     "@types/node": "^26.6.6",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.1",
     "prettier-plugin-astro": "^1.1.2",
-    "sass-embedded": "^1.107.1",
+    "sass-embedded": "^1.108.2",
     "typescript": "^6.0.3",
     "vitest": "^5.1.0",
     "yaml": "^2.9.1"
