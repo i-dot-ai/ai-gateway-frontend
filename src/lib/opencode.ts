@@ -30,6 +30,7 @@ interface OpencodeModel {
 export interface OpencodeConfig {
 	$schema: string;
 	permissions: Array<{ action: string; resource: string; effect: string }>;
+	"autoupdate": false,
 	providers: {
 		litellm: {
 			package: string;
