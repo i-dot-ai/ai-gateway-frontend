@@ -45,6 +45,7 @@ describe('opencode.json', () => {
 		const config = JSON.parse(await response.text());
 
 		expect(config.$schema).toBe('https://opencode.ai/config.json');
+		expect(config.update).toBe('disable');
 		expect(config.providers.litellm.package).toBe('@opencode/ai/providers/openai-compatible');
 		expect(config.providers.litellm.settings.baseURL).toBe('https://llm-gateway.i.ai.gov.uk/v1');
 		expect(config.providers.litellm.body).toEqual({ drop_params: true });

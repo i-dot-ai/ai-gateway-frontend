@@ -30,7 +30,7 @@ interface OpencodeModel {
 export interface OpencodeConfig {
 	$schema: string;
 	permissions: Array<{ action: string; resource: string; effect: string }>;
-	"autoupdate": false,
+	update: "disable";
 	providers: {
 		litellm: {
 			package: string;
@@ -96,6 +96,7 @@ export function buildOpencodeConfig(models: ReadonlyArray<LitellmModel>): Openco
 
 	return {
 		$schema: "https://opencode.ai/config.json",
+		update: "disable",
 		permissions: [
 			{ action: "external_directory", resource: "*", effect: "ask" },
 		],
