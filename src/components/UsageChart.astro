@@ -1,13 +1,15 @@
 ---
+import { Chart } from "@i-dot-ai-npm/component-library-solid";
+import type { ChartColour } from "@i-dot-ai-npm/component-library-frontend";
 import { formatChartValue, CHART_INTL_FORMATS } from "../lib/usage";
 
 /**
  * One stacked bar-chart panel for the "Your usage" tabs - a metric bucketed
  * over the selected period, split into stacked series (per model for
- * spend/tokens, or succeeded/failed for requests). Drawn by the i.AI Design
- * System chart component from this data table; initAllIAIDesignSystem (in the
- * layout script) swaps in the canvas, where the tooltip lists each part of a
- * stack with the stack's total. The table is the no-JS fallback.
+ * spend/tokens, or succeeded/failed for requests). Rendered by the i.AI
+ * Design System's solid Chart component and enhanced by initAllIAIDesignSystem
+ * (in the layout script), which draws the canvas from the component's data
+ * table; the table is the no-JS fallback.
  */
 export interface Props {
   /** Unique panel id - several panels share the page. */
@@ -17,7 +19,7 @@ export interface Props {
   /** Stacked series, drawn bottom-to-top in order. */
   datasets: Array<{ label: string; data: number[] }>;
   /** i.AI chart-colour names, applied to the series in order. Omit for the default palette order. */
-  colours?: string[];
+  colours?: ChartColour[];
   /** Units shown under the chart's heading, e.g. "Tokens". */
   yLabel: string;
   /** How to format values, in both the chart (axis/tooltip) and the table. */
@@ -31,57 +33,49 @@ const { id, labels, datasets, colours, yLabel, valueFormat, caption } =
 const intlFormat = CHART_INTL_FORMATS[valueFormat];
 ---
 
-<div
+<Chart
   id={id}
-  class="iai-chart iai-chart--stacked-bar"
-  data-module="iai-chart"
-  data-iai-chart-format={intlFormat ? JSON.stringify(intlFormat) : undefined}
->
-  <h3 class="govuk-visually-hidden">{caption}</h3>
-  <p class="iai-chart__description govuk-body-s app-muted govuk-!-margin-bottom-2">
-    {yLabel}
-  </p>
-  <details class="govuk-details">
-    <summary class="govuk-details__summary">
-      <span class="govuk-details__summary-text">View chart data</span>
-    </summary>
-    <div class="govuk-details__text">
-      <table class="govuk-table govuk-!-margin-bottom-0">
-        <caption class="govuk-visually-hidden">{caption}</caption>
-        <thead class="govuk-table__head">
-          <tr class="govuk-table__row">
-            <th scope="col" class="govuk-table__header">
-              Date
-            </th>
-            {datasets.map((d, i) => (
-              <th
-                scope="col"
-                class="govuk-table__header govuk-table__header--numeric"
-                data-iai-chart-colour={colours?.[i]}
-              >
-                {d.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody class="govuk-table__body">
-          {labels.map((label, row) => (
-            <tr class="govuk-table__row">
-              <th scope="row" class="govuk-table__header">
-                {label}
-              </th>
-              {datasets.map((d) => (
-                <td
-                  class="govuk-table__cell govuk-table__cell--numeric"
-                  data-value={d.data[row]}
-                >
-                  {formatChartValue(d.data[row] ?? 0, valueFormat)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </details>
-</div>
+  class="app-usage-chart"
+  variant="stacked-bar"
+  title={caption}
+  description={yLabel}
+  data={{
+    heading: "Date",
+    labels,
+    datasets: datasets.map((d, i) => ({
+      label: d.label,
+      data: d.data,
+      colour: colours?.[i],
+    })),
+  }}
+  format={(value: number) => formatChartValue(value, valueFormat)}
+  {...(intlFormat
+    ? { "data-iai-chart-format": JSON.stringify(intlFormat) }
+    : {})}
+/>
+
+<style>
+  /* The tab panels carry their own visible headings, so the chart's title only
+     names the canvas and its data table - hide it on screen (as
+     govuk-visually-hidden does). */
+  :global(.app-usage-chart > h3) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Keep the units line small and muted, as before. */
+  :global(.app-usage-chart > .iai-chart__description) {
+    margin-bottom: 10px;
+    font-size: 0.875rem;
+    line-height: 1.1428571429;
+    color: var(--govuk-secondary-text-colour);
+  }
+</style>

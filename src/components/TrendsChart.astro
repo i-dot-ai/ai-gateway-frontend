@@ -1,12 +1,12 @@
 ---
+import { Chart } from "@i-dot-ai-npm/component-library-solid";
 import { formatChartValue, formatDay, CHART_INTL_FORMATS } from "../lib/usage";
 
 /**
- * One area-chart panel for the trends page - a metric over time, drawn by the
- * i.AI Design System chart component from this data table. The table is the
- * no-JS fallback; initAllIAIDesignSystem (in the layout script) swaps in the
- * canvas. Unlike the home page's UsageChart it has a single series, which is
- * all the kit's chart does for line/area.
+ * One area-chart panel for the trends page - a metric over time, rendered by
+ * the i.AI Design System's solid Chart component and enhanced by
+ * initAllIAIDesignSystem (in the layout script), which draws the canvas from
+ * the component's data table; the table is the no-JS fallback.
  */
 export interface TrendsChartData {
   /** YYYY-MM-DD each point's bucket starts on - the x-axis. */
@@ -29,55 +29,34 @@ const { id, title, chartData, valueFormat } = Astro.props;
 const intlFormat = CHART_INTL_FORMATS[valueFormat];
 ---
 
-<div
+<Chart
   id={id}
-  class="iai-chart iai-chart--area app-trend-chart"
-  data-module="iai-chart"
-  data-iai-chart-format={intlFormat ? JSON.stringify(intlFormat) : undefined}
->
-  <h3 class="govuk-heading-s govuk-!-margin-bottom-2">{title}</h3>
-  <details class="govuk-details">
-    <summary class="govuk-details__summary">
-      <span class="govuk-details__summary-text">View chart data</span>
-    </summary>
-    <div class="govuk-details__text">
-      <table class="govuk-table govuk-!-margin-bottom-0">
-        <thead class="govuk-table__head">
-          <tr class="govuk-table__row">
-            <th scope="col" class="govuk-table__header">
-              Date
-            </th>
-            <th
-              scope="col"
-              class="govuk-table__header govuk-table__header--numeric"
-              data-iai-chart-colour="blue"
-            >
-              {chartData.label}
-            </th>
-          </tr>
-        </thead>
-        <tbody class="govuk-table__body">
-          {chartData.labels.map((label, i) => (
-            <tr class="govuk-table__row">
-              <th scope="row" class="govuk-table__header">
-                {formatDay(label)}
-              </th>
-              <td
-                class="govuk-table__cell govuk-table__cell--numeric"
-                data-value={chartData.data[i]}
-              >
-                {formatChartValue(chartData.data[i] ?? 0, valueFormat)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </details>
-</div>
+  class="app-trend-chart"
+  variant="area"
+  title={title}
+  data={{
+    heading: "Date",
+    labels: chartData.labels.map(formatDay),
+    datasets: [
+      { label: chartData.label, data: [...chartData.data], colour: "blue" },
+    ],
+  }}
+  format={(value: number) => formatChartValue(value, valueFormat)}
+  {...(intlFormat
+    ? { "data-iai-chart-format": JSON.stringify(intlFormat) }
+    : {})}
+/>
 
 <style>
-  .app-trend-chart {
+  :global(.app-trend-chart) {
     margin-bottom: 30px;
+  }
+
+  /* Keep the chart's title the same size as before (h3 styled as
+     govuk-heading-s; the kit renders it as govuk-heading-m). */
+  :global(.app-trend-chart > h3) {
+    margin-bottom: 10px;
+    font-size: 1.1875rem;
+    line-height: 1.3157894737;
   }
 </style>
