@@ -421,6 +421,19 @@ export function formatSpan(span: Pick<DailyUsage, "date" | "end">, formatDate: (
 /** Grams to one decimal ("0.4", "63.6", "1,250"). */
 const grams = (value: number) => value.toLocaleString("en-GB", { maximumFractionDigits: 1 });
 
+/**
+ * Intl.NumberFormat options per chart value format, set on the i.AI Design
+ * System chart via `data-iai-chart-format` (it formats axis ticks and tooltips
+ * itself). `count` has no entry: the kit's default en-GB formatting is right.
+ * Carbon is compact notation; the "g CO₂e" unit lives in the description.
+ */
+export const CHART_INTL_FORMATS: Record<string, object | undefined> = {
+	spend: { style: "currency", currency: "USD" },
+	tokens: { notation: "compact" },
+	carbon: { notation: "compact" },
+	count: undefined,
+};
+
 /** Chart value for tooltips: spend, compact tokens, grams of CO2e, or a plain count. */
 export function formatChartValue(value: number, format: string): string {
 	if (format === "spend") return formatSpend(value);
@@ -428,73 +441,6 @@ export function formatChartValue(value: number, format: string): string {
 	if (format === "carbon") return `${grams(value)} g CO₂e`;
 	return value.toLocaleString("en-GB");
 }
-
-/**
- * Chart axis tick: compact figures (5k, 10k, 2M) with no trailing ".0", for
- * counts as well as tokens - tooltips keep the full count. Spend shows whole
- * dollars unless any tick on the axis is fractional (small spends), then cents,
- * so ticks like $0.25 never collapse to "$0".
- */
-export function formatChartTick(value: number, format: string, ticks: ReadonlyArray<{ value: number }> = []): string {
-	if (format === "spend") {
-		return ticks.some((t) => !Number.isInteger(t.value)) ? formatSpend(value) : `$${value.toLocaleString("en-GB")}`;
-	}
-	if (format === "carbon" && value < 1_000) return grams(value);
-	return trimCompact(compact(value));
-}
-
-/** Round a raw step up to a "nice" 1/2/5-times-magnitude value, at least 1. */
-function niceStep(x: number): number {
-	if (x <= 1) return 1;
-	const pow = Math.pow(10, Math.floor(Math.log10(x)));
-	const n = x / pow;
-	return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * pow;
-}
-
-/**
- * A y-axis max and step for compact (token/count) scales that land every tick on
- * a whole compact unit (1M, 2M, 3M rather than 1.5M), so the axis reads without
- * decimals. The step is a whole number of the max's unit (k/M/B).
- */
-export function compactAxis(max: number): { max: number; stepSize: number } {
-	if (max <= 0) return { max: 1, stepSize: 1 };
-	const unit = max >= 1e9 ? 1e9 : max >= 1e6 ? 1e6 : max >= 1e3 ? 1e3 : 1;
-	const stepSize = niceStep(max / unit / 5) * unit;
-	return { max: Math.ceil(max / stepSize) * stepSize, stepSize };
-}
-
-/**
- * Shared chart theme, per the i.AI Design System chart colours
- * (i-ai-design-system.ai.gov.uk/styles/chart-colours): black tint 80% for axes
- * and lines, black for labels.
- */
-export const CHART_FONT = { family: '"Inter", Helvetica, Arial, sans-serif', size: 16 };
-export const CHART_GRID_COLOR = "#cecece";
-export const CHART_TICK_COLOR = "var(--govuk-text-colour)";
-
-/** The chart font at page body size: 19px on desktop, 16px below the tablet breakpoint. Browser only. */
-export function chartFont(): typeof CHART_FONT {
-	return { ...CHART_FONT, size: window.matchMedia("(min-width: 40.0625em)").matches ? 19 : 16 };
-}
-
-/**
- * Resolves a `var(--token)` colour to its computed value, since canvas can't
- * read CSS variables. Other colours pass through. Browser only.
- */
-export function themeColour(colour: string): string {
-	const name = /^var\((--[\w-]+)\)$/.exec(colour)?.[1];
-	if (!name) return colour;
-	return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || colour;
-}
-
-/**
- * i.AI Design System categorical chart palette, in the kit's order: primary
- * blue, blue shade 50%, primary magenta, purple/teal/orange tint 25%.
- */
-export const CHART_PALETTE = ["#1d70b8", "#0f385c", "#ca357c", "#7f65b7", "#50a1a5", "#f7996a"];
-
-/** Single-series accent (area charts, meters, sparklines): the palette's first colour. */
-export const CHART_ACCENT = CHART_PALETTE[0];
 
 /** A short chart label from an ISO date (YYYY-MM-DD), e.g. "1 Aug", in UTC. */
 export function formatDay(date: string): string {

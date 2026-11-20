@@ -1,8 +1,7 @@
 /**
- * Pure helpers for turning LiteLLM's daily cost/token rows into a date range
- * to query and into the labels/datasets shape Chart.js expects for a stacked
- * bar chart. Kept separate from litellm.ts (and free of any fetch/DOM code)
- * so the aggregation logic can be unit tested without mocking network calls.
+ * Pure helpers for timeframes and parsing LiteLLM's daily cost/token rows.
+ * Kept separate from litellm.ts (and free of any fetch/DOM code) so the logic
+ * can be unit tested without mocking network calls.
  */
 import type { LitellmCost } from "./litellm";
 
@@ -54,73 +53,3 @@ export function getDateRange(timeframe: Timeframe, now: Date = new Date()): { st
 	return { startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) };
 }
 
-/** The label a cost row falls under for the given breakdown - LiteLLM omits team_id for keys with no team, so those are grouped together rather than silently dropped. */
-function seriesKey(cost: LitellmCost, breakdown: Breakdown): string {
-	if (breakdown === "models") {
-		return cost.model_name;
-	}
-	return cost.team_name || "personal";
-}
-
-// LiteLLM reports raw token counts, but those numbers get large fast - millions
-// of tokens is the unit people actually reason about, and matches the axis
-// label rendered alongside this value.
-const TOKENS_PER_MILLION = 1_000_000;
-
-function metricValue(cost: LitellmCost, metric: Metric): number {
-	return metric === "spend" ? cost.spend : cost.total_tokens / TOKENS_PER_MILLION;
-}
-
-/** Series beyond this rank (by total value across the whole timeframe) are folded into "Other", so the chart stays readable when there are many teams/models. */
-const MAX_NAMED_SERIES = 5;
-const OTHER_LABEL = "Other";
-
-export interface ChartData {
-	labels: ReadonlyArray<string>;
-	datasets: ReadonlyArray<{ label: string; data: ReadonlyArray<number> }>;
-}
-
-/**
- * One label per day present in `costs`, one dataset per team/model - each
- * dataset holds that series' value for every date (0 where it had none), so
- * Chart.js can stack them straightforwardly without gaps. Only the top
- * `MAX_NAMED_SERIES` series by total value keep their own name; the rest are
- * summed together into a single "Other" series.
- */
-export function buildChartData(costs: ReadonlyArray<LitellmCost>, breakdown: Breakdown, metric: Metric): ChartData {
-	const dates = [...new Set(costs.map((c) => c.date))].sort();
-
-	const seriesTotals = new Map<string, number>();
-	for (const cost of costs) {
-		const key = seriesKey(cost, breakdown);
-		seriesTotals.set(key, (seriesTotals.get(key) ?? 0) + metricValue(cost, metric));
-	}
-
-	const namedSeries = new Set(
-		[...seriesTotals.entries()]
-			.sort(([, a], [, b]) => b - a)
-			.slice(0, MAX_NAMED_SERIES)
-			.map(([name]) => name)
-	);
-	const hasOther = seriesTotals.size > namedSeries.size;
-
-	const totals = new Map<string, number>();
-	for (const cost of costs) {
-		const key = seriesKey(cost, breakdown);
-		const label = namedSeries.has(key) ? key : OTHER_LABEL;
-		const bucketKey = `${cost.date}\u0000${label}`;
-		totals.set(bucketKey, (totals.get(bucketKey) ?? 0) + metricValue(cost, metric));
-	}
-
-	const seriesNames = [...namedSeries].sort();
-	if (hasOther) {
-		seriesNames.push(OTHER_LABEL);
-	}
-
-	const datasets = seriesNames.map((name) => ({
-		label: name,
-		data: dates.map((date) => totals.get(`${date}\u0000${name}`) ?? 0),
-	}));
-
-	return { labels: dates, datasets };
-}

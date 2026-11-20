@@ -23,12 +23,10 @@ import {
 import {
   bucketDailyUsage,
   bucketValues,
-  CHART_PALETTE,
   formatDay,
   formatFailureRate,
   formatRequests,
   formatShare,
-  formatSpan,
   formatSpend,
   formatTokens,
   granularityFor,
@@ -69,11 +67,10 @@ const plotSeries = bucketDailyUsage(
 const keyUsage = summariseKeyRequests(costs);
 const personal = breakdown === "model";
 
-// Shared x-axis for every usage plot: a short label per bucket and the full span
-// for its tooltip title. The GDS categorical palette colours the stacked
-// segments (busiest first, "Other" taking whichever colour it lands on).
+// Shared x-axis for every usage plot: a short label per bucket. The kit's
+// default palette colours the stacked segments (busiest first, "Other" taking
+// whichever colour it lands on).
 const chartLabels = plotSeries.map((d) => formatDay(d.date));
-const chartTitles = plotSeries.map((d) => formatSpan(d, formatDay));
 const groupOf = personal
   ? (c: LitellmCost) => c.model_name
   : (c: LitellmCost) => c.team_name || "Personal keys";
@@ -449,9 +446,7 @@ const impactView = impactTotals && {
       <UsageChart
         id={`chart-${m.id}`}
         labels={chartLabels}
-        titles={chartTitles}
         datasets={m.datasets}
-        colors={CHART_PALETTE}
         yLabel={m.yLabel}
         valueFormat={m.valueFormat}
         caption={m.caption}
@@ -478,9 +473,8 @@ const impactView = impactTotals && {
     <UsageChart
       id="chart-requests"
       labels={chartLabels}
-      titles={chartTitles}
       datasets={requestView.datasets}
-      colors={[CHART_PALETTE[0], "var(--govuk-error-colour)"]}
+      colours={["blue", "red"]}
       yLabel="Requests"
       valueFormat="count"
       caption={requestView.caption}
@@ -547,9 +541,7 @@ const impactView = impactTotals && {
         <UsageChart
           id="chart-impact"
           labels={chartLabels}
-          titles={chartTitles}
           datasets={carbonDatasets}
-          colors={CHART_PALETTE}
           yLabel="Carbon (g CO₂e)"
           valueFormat="carbon"
           caption={`Carbon per ${granularity} by ${breakdown}, grams of CO₂e`}

@@ -1,215 +1,81 @@
 ---
+import { Chart } from "@i-dot-ai-npm/component-library-solid";
+import type { ChartColour } from "@i-dot-ai-npm/component-library-frontend";
+import { formatChartValue, CHART_INTL_FORMATS } from "../lib/usage";
+
 /**
- * One stacked bar-chart panel for the "Your usage" tabs - a metric bucketed over
- * the selected period, split into stacked series (per model for spend/tokens, or
- * succeeded/failed for requests). Like TrendsChart.astro it serialises its data
- * into a canvas data-* attribute and draws it in a client script that renders
- * every `.usage-chart` canvas on the page, so panels add without a script each.
- *
- * The tooltip lists each non-zero series for the hovered bucket on its own line,
- * then the bucket total, so a stacked bar reads at a glance.
+ * One stacked bar-chart panel for the "Your usage" tabs - a metric bucketed
+ * over the selected period, split into stacked series (per model for
+ * spend/tokens, or succeeded/failed for requests). Rendered by the i.AI
+ * Design System's solid Chart component and enhanced by initAllIAIDesignSystem
+ * (in the layout script), which draws the canvas from the component's data
+ * table; the table is the no-JS fallback.
  */
 export interface Props {
-  /** Unique canvas id - several panels share the page. */
+  /** Unique panel id - several panels share the page. */
   id: string;
   /** Short x-axis labels, e.g. "23 Sep". */
   labels: string[];
-  /** Tooltip titles - the full span each bucket covers, e.g. "23 Jun to 29 Jun". */
-  titles: string[];
   /** Stacked series, drawn bottom-to-top in order. */
   datasets: Array<{ label: string; data: number[] }>;
-  /** Bar colours, applied to datasets in order. */
-  colors: string[];
+  /** i.AI chart-colour names, applied to the series in order. Omit for the default palette order. */
+  colours?: ChartColour[];
+  /** Units shown under the chart's heading, e.g. "Tokens". */
   yLabel: string;
-  /** How to format axis ticks and tooltip values. */
+  /** How to format values, in both the chart (axis/tooltip) and the table. */
   valueFormat: "count" | "spend" | "tokens" | "carbon";
-  /** Accessible description of the chart. */
+  /** Accessible name of the chart. */
   caption: string;
 }
 
-const { id, labels, titles, datasets, colors, yLabel, valueFormat, caption } =
+const { id, labels, datasets, colours, yLabel, valueFormat, caption } =
   Astro.props;
-const data = JSON.stringify({
-  labels,
-  titles,
-  datasets,
-  colors,
-  yLabel,
-  format: valueFormat,
-});
+const intlFormat = CHART_INTL_FORMATS[valueFormat];
 ---
 
-<figure class="app-usage-chart">
-  <canvas
-    class="usage-chart"
-    id={id}
-    data-chart={data}
-    role="img"
-    aria-label={caption}
-    height="220"
-  ></canvas>
-</figure>
-
-<script>
-  import {
-    Chart,
-    BarController,
-    BarElement,
-    CategoryScale,
-    LinearScale,
-    Tooltip,
-    Legend,
-  } from "chart.js";
-  import {
-    chartFont,
-    compactAxis,
-    formatChartValue,
-    formatChartTick,
-    CHART_GRID_COLOR,
-    CHART_TICK_COLOR,
-    themeColour,
-  } from "../lib/usage";
-
-  // Cherry-picking controllers/elements (not chart.js/auto) skips the
-  // auto-registered plugins, so register the ones we use.
-  Chart.register(
-    BarController,
-    BarElement,
-    CategoryScale,
-    LinearScale,
-    Tooltip,
-    Legend,
-  );
-
-  type Payload = {
-    labels: string[];
-    titles: string[];
-    datasets: { label: string; data: number[] }[];
-    colors: string[];
-    yLabel: string;
-    format: string;
-  };
-
-  const tickColor = themeColour(CHART_TICK_COLOR);
-  const font = chartFont();
-
-  for (const canvas of document.querySelectorAll<HTMLCanvasElement>(
-    "canvas.usage-chart",
-  )) {
-    const { labels, titles, datasets, colors, yLabel, format } = JSON.parse(
-      canvas.dataset.chart ?? "{}",
-    ) as Payload;
-    const multi = datasets.length > 1;
-
-    // Spend keeps Chart.js's own $ scale; token/count scales are pinned to a
-    // whole-unit max and step (via the tallest stacked bar) so ticks stay decimal-free.
-    // Carbon under 5 g also keeps Chart.js's scale, so sub-gram days get fractional ticks.
-    const stackedMax = Math.max(
-      0,
-      ...labels.map((_, i) =>
-        datasets.reduce((sum, d) => sum + (d.data[i] ?? 0), 0),
-      ),
-    );
-    const axis =
-      format === "spend" || (format === "carbon" && stackedMax < 5)
-        ? null
-        : compactAxis(stackedMax);
-
-    new Chart(canvas, {
-      type: "bar",
-      data: {
-        labels,
-        datasets: datasets.map((d, i) => ({
-          label: d.label,
-          data: d.data,
-          backgroundColor: themeColour(colors[i % colors.length]),
-        })),
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: "index", intersect: false },
-        plugins: {
-          legend: {
-            display: multi,
-            position: "top",
-            align: "end",
-            labels: { font: font, boxWidth: 12, boxHeight: 12 },
-          },
-          tooltip: {
-            titleFont: font,
-            bodyFont: font,
-            footerFont: font,
-            // One line per series with a value here; a "" label would still
-            // leave a blank swatch row, so filter zero segments out instead.
-            filter: (item: { parsed: { y: number | null } }) =>
-              (item.parsed.y ?? 0) !== 0,
-            callbacks: {
-              title: (items: { dataIndex: number }[]) =>
-                titles[items[0]?.dataIndex] ?? "",
-              label: (ctx: {
-                dataset: { label?: string };
-                parsed: { y: number | null };
-              }) =>
-                `${ctx.dataset.label}: ${formatChartValue(ctx.parsed.y ?? 0, format)}`,
-              // The stacked total, so a bar reads without summing its parts.
-              footer: (items: { parsed: { y: number | null } }[]) =>
-                `Total: ${formatChartValue(
-                  items.reduce((s, it) => s + (it.parsed.y ?? 0), 0),
-                  format,
-                )}`,
-            },
-          },
-        },
-        scales: {
-          x: {
-            stacked: true,
-            grid: { display: false },
-            ticks: {
-              font: font,
-              color: tickColor,
-              maxRotation: 0,
-              autoSkip: true,
-              autoSkipPadding: 16,
-              maxTicksLimit: 8,
-            },
-          },
-          y: {
-            stacked: true,
-            beginAtZero: true,
-            ...(axis ? { max: axis.max } : {}),
-            border: { display: false },
-            grid: { color: CHART_GRID_COLOR },
-            title: {
-              display: true,
-              text: yLabel,
-              font: font,
-              color: tickColor,
-            },
-            ticks: {
-              font: font,
-              color: tickColor,
-              maxTicksLimit: 6,
-              ...(axis ? { stepSize: axis.stepSize } : {}),
-              callback: (
-                value: number | string,
-                _i: number,
-                ticks: { value: number }[],
-              ) => formatChartTick(Number(value), format, ticks),
-            },
-          },
-        },
-      },
-    });
-  }
-</script>
+<Chart
+  id={id}
+  class="app-usage-chart"
+  variant="stacked-bar"
+  title={caption}
+  description={yLabel}
+  data={{
+    heading: "Date",
+    labels,
+    datasets: datasets.map((d, i) => ({
+      label: d.label,
+      data: d.data,
+      colour: colours?.[i],
+    })),
+  }}
+  format={(value: number) => formatChartValue(value, valueFormat)}
+  {...(intlFormat
+    ? { "data-iai-chart-format": JSON.stringify(intlFormat) }
+    : {})}
+/>
 
 <style>
-  .app-usage-chart {
-    margin: 0;
+  /* The tab panels carry their own visible headings, so the chart's title only
+     names the canvas and its data table - hide it on screen (as
+     govuk-visually-hidden does). */
+  :global(.app-usage-chart > h3) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
   }
 
-  .app-usage-chart canvas {
-    max-height: 240px;
+  /* Keep the units line small and muted, as before. */
+  :global(.app-usage-chart > .iai-chart__description) {
+    margin-bottom: 10px;
+    font-size: 0.875rem;
+    line-height: 1.1428571429;
+    color: var(--govuk-secondary-text-colour);
   }
 </style>
