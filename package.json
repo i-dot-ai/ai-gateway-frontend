@@ -29,6 +29,7 @@
     "astro": "^7.4.11",
     "chart.js": "^4.6.1",
     "dotenv": "^18.0.10",
+    "exceljs": "^4.4.0",
     "govuk-frontend": "^6.6.0",
     "hyparquet": "^1.33.0",
     "posthog-node": "^5.71.0",
