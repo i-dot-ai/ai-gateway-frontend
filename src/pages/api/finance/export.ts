@@ -82,16 +82,16 @@ export const GET: APIRoute = async ({ url }) => {
 
 	// Column headers
 	modelSheet.columns = [
-		{ header: 'date', key: 'date', width: 12 },
-		{ header: 'product/team', key: 'team', width: 20 },
-		{ header: 'provider', key: 'provider', width: 15 },
-		{ header: 'model', key: 'model', width: 35 },
-		{ header: 'request_count', key: 'request_count', width: 14 },
-		{ header: 'input_tokens', key: 'input_tokens', width: 14 },
-		{ header: 'output_tokens', key: 'output_tokens', width: 14 },
-		{ header: 'total_tokens', key: 'total_tokens', width: 14 },
-		{ header: 'cost ($)', key: 'cost_usd', width: 12 },
-		{ header: `cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`, key: 'cost_gbp', width: 30 },
+		{ header: 'Date', key: 'date', width: 12 },
+		{ header: 'Product or team', key: 'team', width: 20 },
+		{ header: 'Model provider', key: 'provider', width: 15 },
+		{ header: 'Model', key: 'model', width: 35 },
+		{ header: 'Request count', key: 'request_count', width: 14 },
+		{ header: 'Input tokens', key: 'input_tokens', width: 14 },
+		{ header: 'Output tokens', key: 'output_tokens', width: 14 },
+		{ header: 'Total tokens', key: 'total_tokens', width: 14 },
+		{ header: 'Cost ($)', key: 'cost_usd', width: 12 },
+		{ header: `Cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`, key: 'cost_gbp', width: 30 },
 	];
 
 	// Aggregate by date, team, provider, model
@@ -159,10 +159,10 @@ export const GET: APIRoute = async ({ url }) => {
 	const userSheet = workbook.addWorksheet('User breakdown');
 
 	userSheet.columns = [
-		{ header: 'date', key: 'date', width: 12 },
-		{ header: 'user_id', key: 'user_id', width: 30 },
-		{ header: 'cost ($)', key: 'cost_usd', width: 12 },
-		{ header: `cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`, key: 'cost_gbp', width: 30 },
+		{ header: 'Date', key: 'date', width: 12 },
+		{ header: 'Unique User ID (UUID)', key: 'user_id', width: 40 },
+		{ header: 'Cost ($)', key: 'cost_usd', width: 12 },
+		{ header: `Cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`, key: 'cost_gbp', width: 30 },
 	];
 
 	// Aggregate by date, user
