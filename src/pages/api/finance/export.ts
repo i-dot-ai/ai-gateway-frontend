@@ -4,17 +4,15 @@
  * GET /api/finance/export?start=YYYY-MM-DD&end=YYYY-MM-DD
  *
  * Returns a .zip file containing:
- * - model-breakdown.csv: daily spend by product/team, provider, model
- * - user-breakdown.csv: daily spend by user ID (summed across models)
+ * - model-breakdown.csv: monthly spend by product/team, provider, model
+ * - user-breakdown.csv: monthly spend by user ID (summed across models)
  *
  * Requires:
  * - User to be signed in (ALB OIDC)
  */
 import type { APIRoute } from 'astro';
 import JSZip from 'jszip';
-import { getCosts, getTeams } from '../../../lib/litellm';
-
-
+import { getCosts } from '../../../lib/litellm';
 
 /**
  * Derive provider from model name or litellm model string.
@@ -76,17 +74,13 @@ export const GET: APIRoute = async ({ url }) => {
 	}
 
 	// Fetch data
-	const [costsResult, teamsResult] = await Promise.all([
-		getCosts(startDate, endDate),
-		getTeams(),
-	]);
+	const costsResult = await getCosts(startDate, endDate);
 
 	if (costsResult.error) {
 		return new Response(`Failed to fetch costs: ${costsResult.error}`, { status: 500 });
 	}
 
 	const costs = costsResult.costs;
-	const teamNamesById = new Map(teamsResult.teams.map((t) => [t.id, t.name]));
 
 	// ----- CSV 1: Model breakdown -----
 	const modelHeaders = [
@@ -116,7 +110,7 @@ export const GET: APIRoute = async ({ url }) => {
 
 	for (const cost of costs) {
 		const month = cost.date.slice(0, 7); // "YYYY-MM"
-		const teamName = cost.team_id ? (teamNamesById.get(cost.team_id) ?? cost.team_id) : 'Unassigned';
+		const teamName = cost.team_name || 'Unassigned';
 		const provider = deriveProvider(cost.model_name);
 		const key = `${month}|${teamName}|${provider}|${cost.model_name}`;
 
