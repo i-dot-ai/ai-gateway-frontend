@@ -1,17 +1,17 @@
 /**
- * Finance export endpoint - generates an Excel report of Gateway usage costs.
+ * Finance export endpoint - generates a ZIP with two CSVs of Gateway usage costs.
  *
  * GET /api/finance/export?start=YYYY-MM-DD&end=YYYY-MM-DD
  *
- * Returns an .xlsx file with two sheets:
- * - Model breakdown: daily spend by product/team, provider, model
- * - User breakdown: daily spend by user ID (summed across models)
+ * Returns a .zip file containing:
+ * - model-breakdown.csv: daily spend by product/team, provider, model
+ * - user-breakdown.csv: daily spend by user ID (summed across models)
  *
  * Requires:
  * - User to be signed in (ALB OIDC)
  */
 import type { APIRoute } from 'astro';
-import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { getCosts, getTeams } from '../../../lib/litellm';
 
 // HMRC monthly exchange rate (USD to GBP) - update monthly
@@ -21,7 +21,6 @@ const EXCHANGE_RATE_MONTH = 'Nov 2026';
 
 /**
  * Derive provider from model name or litellm model string.
- * The costs data includes provider breakdown, but we also need it per-row.
  * Check platform prefixes first (bedrock/, vertex_ai/) before model family names.
  */
 function deriveProvider(modelName: string): string {
@@ -36,6 +35,26 @@ function deriveProvider(modelName: string): string {
 	if (lower.includes('mistral')) return 'Mistral';
 	if (lower.includes('llama')) return 'Meta';
 	return 'Other';
+}
+
+/**
+ * Escape a value for CSV (wrap in quotes if it contains comma, quote, or newline).
+ */
+function csvEscape(value: string | number): string {
+	const str = String(value);
+	if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+		return `"${str.replace(/"/g, '""')}"`;
+	}
+	return str;
+}
+
+/**
+ * Convert rows to CSV string.
+ */
+function toCsv(headers: string[], rows: (string | number)[][]): string {
+	const headerLine = headers.map(csvEscape).join(',');
+	const dataLines = rows.map(row => row.map(csvEscape).join(','));
+	return [headerLine, ...dataLines].join('\n');
 }
 
 export const GET: APIRoute = async ({ url }) => {
@@ -72,26 +91,18 @@ export const GET: APIRoute = async ({ url }) => {
 	const costs = costsResult.costs;
 	const teamNamesById = new Map(teamsResult.teams.map((t) => [t.id, t.name]));
 
-	// Build workbook
-	const workbook = new ExcelJS.Workbook();
-	workbook.creator = 'AI Gateway';
-	workbook.created = new Date();
-
-	// ----- Tab 1: Model breakdown -----
-	const modelSheet = workbook.addWorksheet('Model breakdown');
-
-	// Column headers
-	modelSheet.columns = [
-		{ header: 'Date', key: 'date', width: 12 },
-		{ header: 'Product or team', key: 'team', width: 20 },
-		{ header: 'Model provider', key: 'provider', width: 15 },
-		{ header: 'Model', key: 'model', width: 35 },
-		{ header: 'Request count', key: 'request_count', width: 14 },
-		{ header: 'Input tokens', key: 'input_tokens', width: 14 },
-		{ header: 'Output tokens', key: 'output_tokens', width: 14 },
-		{ header: 'Total tokens', key: 'total_tokens', width: 14 },
-		{ header: 'Cost ($)', key: 'cost_usd', width: 12 },
-		{ header: `Cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`, key: 'cost_gbp', width: 30 },
+	// ----- CSV 1: Model breakdown -----
+	const modelHeaders = [
+		'Date',
+		'Product or team',
+		'Model provider',
+		'Model',
+		'Request count',
+		'Input tokens',
+		'Output tokens',
+		'Total tokens',
+		'Cost ($)',
+		`Cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`,
 	];
 
 	// Aggregate by date, team, provider, model
@@ -134,35 +145,34 @@ export const GET: APIRoute = async ({ url }) => {
 		}
 	}
 
-	// Sort by date, team, model and add rows
-	const modelRows = Array.from(modelAgg.values()).sort((a, b) => {
-		if (a.date !== b.date) return a.date.localeCompare(b.date);
-		if (a.team !== b.team) return a.team.localeCompare(b.team);
-		return a.model.localeCompare(b.model);
-	});
+	// Sort by date, team, model
+	const modelRows = Array.from(modelAgg.values())
+		.sort((a, b) => {
+			if (a.date !== b.date) return a.date.localeCompare(b.date);
+			if (a.team !== b.team) return a.team.localeCompare(b.team);
+			return a.model.localeCompare(b.model);
+		})
+		.map(row => [
+			row.date,
+			row.team,
+			row.provider,
+			row.model,
+			row.request_count,
+			row.input_tokens,
+			row.output_tokens,
+			row.total_tokens,
+			row.cost_usd.toFixed(2),
+			(row.cost_usd * EXCHANGE_RATE).toFixed(2),
+		]);
 
-	for (const row of modelRows) {
-		modelSheet.addRow({
-			...row,
-			cost_gbp: row.cost_usd * EXCHANGE_RATE,
-		});
-	}
+	const modelCsv = toCsv(modelHeaders, modelRows);
 
-	// Format currency columns
-	modelSheet.getColumn('cost_usd').numFmt = '"$"#,##0.00';
-	modelSheet.getColumn('cost_gbp').numFmt = '"£"#,##0.00';
-
-	// Bold header row
-	modelSheet.getRow(1).font = { bold: true };
-
-	// ----- Tab 2: User breakdown -----
-	const userSheet = workbook.addWorksheet('User breakdown');
-
-	userSheet.columns = [
-		{ header: 'Date', key: 'date', width: 12 },
-		{ header: 'Unique User ID (UUID)', key: 'user_id', width: 40 },
-		{ header: 'Cost ($)', key: 'cost_usd', width: 12 },
-		{ header: `Cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`, key: 'cost_gbp', width: 30 },
+	// ----- CSV 2: User breakdown -----
+	const userHeaders = [
+		'Date',
+		'Unique User ID (UUID)',
+		'Cost ($)',
+		`Cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`,
 	];
 
 	// Aggregate by date, user
@@ -173,7 +183,6 @@ export const GET: APIRoute = async ({ url }) => {
 	}>();
 
 	for (const cost of costs) {
-		// user_id from costs is actually the key owner
 		const userId = cost.user_id ?? 'unknown';
 		const key = `${cost.date}|${userId}`;
 
@@ -189,38 +198,35 @@ export const GET: APIRoute = async ({ url }) => {
 		}
 	}
 
-	// Sort by date, user and add rows with user info lookup
-	const userRows = Array.from(userAgg.values()).sort((a, b) => {
-		if (a.date !== b.date) return a.date.localeCompare(b.date);
-		return a.user_id.localeCompare(b.user_id);
-	});
+	// Sort by date, user
+	const userRows = Array.from(userAgg.values())
+		.sort((a, b) => {
+			if (a.date !== b.date) return a.date.localeCompare(b.date);
+			return a.user_id.localeCompare(b.user_id);
+		})
+		.map(row => [
+			row.date,
+			row.user_id,
+			row.cost_usd.toFixed(2),
+			(row.cost_usd * EXCHANGE_RATE).toFixed(2),
+		]);
 
-	for (const row of userRows) {
-		userSheet.addRow({
-			date: row.date,
-			user_id: row.user_id,
-			cost_usd: row.cost_usd,
-			cost_gbp: row.cost_usd * EXCHANGE_RATE,
-		});
-	}
+	const userCsv = toCsv(userHeaders, userRows);
 
-	// Format currency columns
-	userSheet.getColumn('cost_usd').numFmt = '"$"#,##0.00';
-	userSheet.getColumn('cost_gbp').numFmt = '"£"#,##0.00';
+	// ----- Create ZIP -----
+	const zip = new JSZip();
+	zip.file('model-breakdown.csv', modelCsv);
+	zip.file('user-breakdown.csv', userCsv);
 
-	// Bold header row
-	userSheet.getRow(1).font = { bold: true };
-
-	// Generate buffer
-	const buffer = await workbook.xlsx.writeBuffer();
+	const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
 
 	// Return as download
-	const filename = `gateway-finance-report-${startDate}-to-${endDate}.xlsx`;
+	const filename = `gateway-finance-report-${startDate}-to-${endDate}.zip`;
 
-	return new Response(buffer, {
+	return new Response(zipBuffer, {
 		status: 200,
 		headers: {
-			'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+			'Content-Type': 'application/zip',
 			'Content-Disposition': `attachment; filename="${filename}"`,
 		},
 	});
