@@ -93,7 +93,7 @@ export const GET: APIRoute = async ({ url }) => {
 
 	// ----- CSV 1: Model breakdown -----
 	const modelHeaders = [
-		'Date',
+		'Month',
 		'Product or team',
 		'Model provider',
 		'Model',
@@ -105,9 +105,9 @@ export const GET: APIRoute = async ({ url }) => {
 		`Cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`,
 	];
 
-	// Aggregate by date, team, provider, model
+	// Aggregate by month, team, provider, model
 	const modelAgg = new Map<string, {
-		date: string;
+		month: string;
 		team: string;
 		provider: string;
 		model: string;
@@ -119,9 +119,10 @@ export const GET: APIRoute = async ({ url }) => {
 	}>();
 
 	for (const cost of costs) {
+		const month = cost.date.slice(0, 7); // "YYYY-MM"
 		const teamName = cost.team_id ? (teamNamesById.get(cost.team_id) ?? cost.team_id) : 'Unassigned';
 		const provider = deriveProvider(cost.model_name);
-		const key = `${cost.date}|${teamName}|${provider}|${cost.model_name}`;
+		const key = `${month}|${teamName}|${provider}|${cost.model_name}`;
 
 		const existing = modelAgg.get(key);
 		if (existing) {
@@ -132,7 +133,7 @@ export const GET: APIRoute = async ({ url }) => {
 			existing.cost_usd += cost.spend;
 		} else {
 			modelAgg.set(key, {
-				date: cost.date,
+				month,
 				team: teamName,
 				provider,
 				model: cost.model_name,
@@ -145,15 +146,15 @@ export const GET: APIRoute = async ({ url }) => {
 		}
 	}
 
-	// Sort by date, team, model
+	// Sort by month, team, model
 	const modelRows = Array.from(modelAgg.values())
 		.sort((a, b) => {
-			if (a.date !== b.date) return a.date.localeCompare(b.date);
+			if (a.month !== b.month) return a.month.localeCompare(b.month);
 			if (a.team !== b.team) return a.team.localeCompare(b.team);
 			return a.model.localeCompare(b.model);
 		})
 		.map(row => [
-			row.date,
+			row.month,
 			row.team,
 			row.provider,
 			row.model,
@@ -169,43 +170,44 @@ export const GET: APIRoute = async ({ url }) => {
 
 	// ----- CSV 2: User breakdown -----
 	const userHeaders = [
-		'Date',
+		'Month',
 		'Unique User ID (UUID)',
 		'Cost ($)',
 		`Cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`,
 	];
 
-	// Aggregate by date, user
+	// Aggregate by month, user
 	const userAgg = new Map<string, {
-		date: string;
+		month: string;
 		user_id: string;
 		cost_usd: number;
 	}>();
 
 	for (const cost of costs) {
+		const month = cost.date.slice(0, 7); // "YYYY-MM"
 		const userId = cost.user_id ?? 'unknown';
-		const key = `${cost.date}|${userId}`;
+		const key = `${month}|${userId}`;
 
 		const existing = userAgg.get(key);
 		if (existing) {
 			existing.cost_usd += cost.spend;
 		} else {
 			userAgg.set(key, {
-				date: cost.date,
+				month,
 				user_id: userId,
 				cost_usd: cost.spend,
 			});
 		}
 	}
 
-	// Sort by date, user
+	// Sort by month, user
 	const userRows = Array.from(userAgg.values())
 		.sort((a, b) => {
-			if (a.date !== b.date) return a.date.localeCompare(b.date);
+			if (a.month !== b.month) return a.month.localeCompare(b.month);
 			return a.user_id.localeCompare(b.user_id);
 		})
 		.map(row => [
-			row.date,
+			row.month,
 			row.user_id,
 			row.cost_usd.toFixed(2),
 			(row.cost_usd * EXCHANGE_RATE).toFixed(2),
