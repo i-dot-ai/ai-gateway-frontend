@@ -85,9 +85,9 @@ export const GET: APIRoute = async ({ url }) => {
 	// ----- CSV 1: Model breakdown -----
 	const modelHeaders = [
 		'Month',
-		'Product or team',
-		'Model provider',
 		'Model',
+		'Model provider',
+		'Product or team',
 		'Request count',
 		'Input tokens',
 		'Output tokens',
@@ -145,9 +145,9 @@ export const GET: APIRoute = async ({ url }) => {
 		})
 		.map(row => [
 			row.month,
-			row.team,
-			row.provider,
 			row.model,
+			row.provider,
+			row.team,
 			row.request_count,
 			row.input_tokens,
 			row.output_tokens,
