@@ -1,17 +1,14 @@
 /**
- * Finance export endpoint - generates a ZIP with two CSVs of Gateway usage costs.
+ * Finance export endpoint - generates a CSV of Gateway usage costs.
  *
  * GET /api/finance/export?start=YYYY-MM-DD&end=YYYY-MM-DD
  *
- * Returns a .zip file containing:
- * - model-breakdown.csv: monthly spend by product/team, provider, model
- * - user-breakdown.csv: monthly spend by user ID (summed across models)
+ * Returns a CSV with monthly spend broken down by model, team, and user.
  *
  * Requires:
  * - User to be signed in (ALB OIDC)
  */
 import type { APIRoute } from 'astro';
-import JSZip from 'jszip';
 import { getCosts } from '../../../lib/litellm';
 
 /**
@@ -82,12 +79,13 @@ export const GET: APIRoute = async ({ url }) => {
 
 	const costs = costsResult.costs;
 
-	// ----- CSV 1: Model breakdown -----
-	const modelHeaders = [
+	// CSV headers
+	const headers = [
 		'Month',
 		'Model',
 		'Model provider',
 		'Product or team',
+		'User ID',
 		'Request count',
 		'Input tokens',
 		'Output tokens',
@@ -95,12 +93,13 @@ export const GET: APIRoute = async ({ url }) => {
 		'Cost ($)',
 	];
 
-	// Aggregate by month, team, provider, model
-	const modelAgg = new Map<string, {
+	// Aggregate by month, model, team, user
+	const agg = new Map<string, {
 		month: string;
-		team: string;
-		provider: string;
 		model: string;
+		provider: string;
+		team: string;
+		user_id: string;
 		request_count: number;
 		input_tokens: number;
 		output_tokens: number;
@@ -111,10 +110,11 @@ export const GET: APIRoute = async ({ url }) => {
 	for (const cost of costs) {
 		const month = cost.date.slice(0, 7); // "YYYY-MM"
 		const teamName = cost.team_name || 'Unassigned';
+		const userId = cost.user_id ?? 'unknown';
 		const provider = deriveProvider(cost.model_name);
-		const key = `${month}|${teamName}|${provider}|${cost.model_name}`;
+		const key = `${month}|${cost.model_name}|${teamName}|${userId}`;
 
-		const existing = modelAgg.get(key);
+		const existing = agg.get(key);
 		if (existing) {
 			existing.request_count += cost.api_requests;
 			existing.input_tokens += cost.prompt_tokens;
@@ -122,11 +122,12 @@ export const GET: APIRoute = async ({ url }) => {
 			existing.total_tokens += cost.total_tokens;
 			existing.cost_usd += cost.spend;
 		} else {
-			modelAgg.set(key, {
+			agg.set(key, {
 				month,
-				team: teamName,
-				provider,
 				model: cost.model_name,
+				provider,
+				team: teamName,
+				user_id: userId,
 				request_count: cost.api_requests,
 				input_tokens: cost.prompt_tokens,
 				output_tokens: cost.completion_tokens,
@@ -136,18 +137,20 @@ export const GET: APIRoute = async ({ url }) => {
 		}
 	}
 
-	// Sort by month, team, model
-	const modelRows = Array.from(modelAgg.values())
+	// Sort by month, model, team, user
+	const rows = Array.from(agg.values())
 		.sort((a, b) => {
 			if (a.month !== b.month) return a.month.localeCompare(b.month);
+			if (a.model !== b.model) return a.model.localeCompare(b.model);
 			if (a.team !== b.team) return a.team.localeCompare(b.team);
-			return a.model.localeCompare(b.model);
+			return a.user_id.localeCompare(b.user_id);
 		})
 		.map(row => [
 			row.month,
 			row.model,
 			row.provider,
 			row.team,
+			row.user_id,
 			row.request_count,
 			row.input_tokens,
 			row.output_tokens,
@@ -155,67 +158,15 @@ export const GET: APIRoute = async ({ url }) => {
 			row.cost_usd.toFixed(2),
 		]);
 
-	const modelCsv = toCsv(modelHeaders, modelRows);
-
-	// ----- CSV 2: User breakdown -----
-	const userHeaders = [
-		'Month',
-		'Unique User ID (UUID)',
-		'Cost ($)',
-	];
-
-	// Aggregate by month, user
-	const userAgg = new Map<string, {
-		month: string;
-		user_id: string;
-		cost_usd: number;
-	}>();
-
-	for (const cost of costs) {
-		const month = cost.date.slice(0, 7); // "YYYY-MM"
-		const userId = cost.user_id ?? 'unknown';
-		const key = `${month}|${userId}`;
-
-		const existing = userAgg.get(key);
-		if (existing) {
-			existing.cost_usd += cost.spend;
-		} else {
-			userAgg.set(key, {
-				month,
-				user_id: userId,
-				cost_usd: cost.spend,
-			});
-		}
-	}
-
-	// Sort by month, user
-	const userRows = Array.from(userAgg.values())
-		.sort((a, b) => {
-			if (a.month !== b.month) return a.month.localeCompare(b.month);
-			return a.user_id.localeCompare(b.user_id);
-		})
-		.map(row => [
-			row.month,
-			row.user_id,
-			row.cost_usd.toFixed(2),
-		]);
-
-	const userCsv = toCsv(userHeaders, userRows);
-
-	// ----- Create ZIP -----
-	const zip = new JSZip();
-	zip.file('model-breakdown.csv', modelCsv);
-	zip.file('user-breakdown.csv', userCsv);
-
-	const zipBuffer = await zip.generateAsync({ type: 'uint8array' });
+	const csv = toCsv(headers, rows);
 
 	// Return as download
-	const filename = `gateway-finance-report-${startDate}-to-${endDate}.zip`;
+	const filename = `gateway-finance-report-${startDate}-to-${endDate}.csv`;
 
-	return new Response(zipBuffer as unknown as BodyInit, {
+	return new Response(csv, {
 		status: 200,
 		headers: {
-			'Content-Type': 'application/zip',
+			'Content-Type': 'text/csv',
 			'Content-Disposition': `attachment; filename="${filename}"`,
 		},
 	});

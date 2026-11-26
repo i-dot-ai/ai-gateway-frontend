@@ -31,7 +31,6 @@
     "dotenv": "^18.0.10",
     "govuk-frontend": "^6.6.0",
     "hyparquet": "^1.33.0",
-    "jszip": "^3.10.2",
     "posthog-node": "^5.71.0",
     "solid-js": "^1.9.19",
     "zod": "4.6.7"
