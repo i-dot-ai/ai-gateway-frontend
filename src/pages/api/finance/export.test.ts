@@ -1,20 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { deriveProvider } from './export';
 
 describe('deriveProvider', () => {
-	const deriveProvider = (modelName: string): string => {
-		const lower = modelName.toLowerCase();
-		// Platform prefixes first - these indicate where the model is hosted
-		if (lower.startsWith('bedrock') || lower.includes('/bedrock')) return 'AWS Bedrock';
-		if (lower.startsWith('vertex') || lower.includes('/vertex')) return 'Google Cloud';
-		// Then model family names
-		if (lower.includes('claude') || lower.includes('anthropic')) return 'Anthropic';
-		if (lower.includes('gpt') || lower.includes('openai')) return 'OpenAI';
-		if (lower.includes('gemini') || lower.includes('google')) return 'Google';
-		if (lower.includes('mistral')) return 'Mistral';
-		if (lower.includes('llama')) return 'Meta';
-		return 'Other';
-	};
-
 	it('identifies Anthropic models', () => {
 		expect(deriveProvider('claude-sonnet-4-20250514')).toBe('Anthropic');
 		expect(deriveProvider('anthropic-claude-opus')).toBe('Anthropic');

@@ -18,7 +18,7 @@ import { getCosts } from '../../../lib/litellm';
  * Derive provider from model name or litellm model string.
  * Check platform prefixes first (bedrock/, vertex_ai/) before model family names.
  */
-function deriveProvider(modelName: string): string {
+export function deriveProvider(modelName: string): string {
 	const lower = modelName.toLowerCase();
 	// Platform prefixes first - these indicate where the model is hosted
 	if (lower.startsWith('bedrock') || lower.includes('/bedrock')) return 'AWS Bedrock';
