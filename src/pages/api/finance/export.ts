@@ -207,12 +207,12 @@ export const GET: APIRoute = async ({ url }) => {
 	zip.file('model-breakdown.csv', modelCsv);
 	zip.file('user-breakdown.csv', userCsv);
 
-	const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+	const zipBuffer = await zip.generateAsync({ type: 'uint8array' });
 
 	// Return as download
 	const filename = `gateway-finance-report-${startDate}-to-${endDate}.zip`;
 
-	return new Response(zipBuffer, {
+	return new Response(zipBuffer as unknown as BodyInit, {
 		status: 200,
 		headers: {
 			'Content-Type': 'application/zip',
