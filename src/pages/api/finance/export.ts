@@ -14,10 +14,7 @@ import type { APIRoute } from 'astro';
 import JSZip from 'jszip';
 import { getCosts, getTeams } from '../../../lib/litellm';
 
-// HMRC monthly exchange rate (USD to GBP) - update monthly
-// Source: https://www.gov.uk/government/publications/hmrc-exchange-rates-for-2026-monthly
-const EXCHANGE_RATE = 0.79;
-const EXCHANGE_RATE_MONTH = 'Nov 2026';
+
 
 /**
  * Derive provider from model name or litellm model string.
@@ -102,7 +99,6 @@ export const GET: APIRoute = async ({ url }) => {
 		'Output tokens',
 		'Total tokens',
 		'Cost ($)',
-		`Cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`,
 	];
 
 	// Aggregate by month, team, provider, model
@@ -163,7 +159,6 @@ export const GET: APIRoute = async ({ url }) => {
 			row.output_tokens,
 			row.total_tokens,
 			row.cost_usd.toFixed(2),
-			(row.cost_usd * EXCHANGE_RATE).toFixed(2),
 		]);
 
 	const modelCsv = toCsv(modelHeaders, modelRows);
@@ -173,7 +168,6 @@ export const GET: APIRoute = async ({ url }) => {
 		'Month',
 		'Unique User ID (UUID)',
 		'Cost ($)',
-		`Cost (£) - exch rate ${EXCHANGE_RATE} (${EXCHANGE_RATE_MONTH})`,
 	];
 
 	// Aggregate by month, user
@@ -210,7 +204,6 @@ export const GET: APIRoute = async ({ url }) => {
 			row.month,
 			row.user_id,
 			row.cost_usd.toFixed(2),
-			(row.cost_usd * EXCHANGE_RATE).toFixed(2),
 		]);
 
 	const userCsv = toCsv(userHeaders, userRows);
