@@ -2,11 +2,10 @@
 #   main          mutable; what core-llm-gateway's console service runs
 #                 (terraform/infra/ecs.tf there pins frontend_image_tag to it)
 #   sha-<commit>  immutable; for pinning and rollbacks
-# Releases (release.yml) are unchanged: semver tags plus latest.
+# There are no releases: the tag above is the whole publishing model.
 #
-# Same org EC2 runner, OIDC auth and EFS build cache as release.yml, with the
-# same secrets: AWS_GITHUBRUNNER_PAT, AWS_REGION, AWS_ACCOUNT_ID. Requires the
-# deployment role's trust to cover this repo (it already does for release.yml).
+# Same org EC2 runner, OIDC auth, EFS build cache and secrets
+# (AWS_GITHUBRUNNER_PAT, AWS_REGION, AWS_ACCOUNT_ID) the release workflow used.
 name: build
 
 on:
